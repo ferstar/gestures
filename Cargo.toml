@@ -16,3 +16,6 @@ libc = "0.2"
 nix = {version = "0.25", features = ["poll"]}
 anyhow = "1.0.66"
 regex = "1.7"
+libxdo = "0.6.0"
+timer = "0.2.0"
+chrono = "0.4.19"

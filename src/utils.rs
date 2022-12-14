@@ -9,7 +9,9 @@ pub fn exec_command_from_string(args: &str, dx: f64, dy: f64, scale: f64) -> Res
     let args = ry.replace_all(args, format!(" {} ", dy));
     let args = rx.replace_all(&args, format!(" {} ", dx));
     let args = rs.replace_all(&args, format!(" {} ", scale));
-    crate::if_debug!(true, &args);
-    Command::new("sh").arg("-c").arg(&*args).spawn()?;
+    if !&args.is_empty() {
+        crate::if_debug!(true, &args);
+        Command::new("sh").arg("-c").arg(&*args).spawn()?;
+    }
     Ok(())
 }

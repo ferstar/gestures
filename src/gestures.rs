@@ -21,6 +21,8 @@ use nix::poll::{poll, PollFd, PollFlags};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
+use crate::xdo_handler::XDoHandler;
+use crate::xdo_handler::start_handler;
 use crate::utils::exec_command_from_string;
 
 /// Tiny little macro to keep from having to write if statements everywhere
@@ -135,13 +137,15 @@ pub enum Gesture {
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Swipe {
     pub direction: Direction,
     pub fingers: i32,
     pub update: Option<String>,
     pub start: Option<String>,
     pub end: Option<String>,
+    pub acceleration: f64,
+    pub mouse_up_delay: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,24 +172,26 @@ pub struct Rotate {
     pub action: String,
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct EventHandler {
     config: Rc<Config>,
     event: Gesture,
-    debug: bool,
+    xdo_handler: XDoHandler,
+    // debug: false,
 }
 
 impl EventHandler {
-    pub fn new(config: Rc<Config>, debug: bool) -> Self {
+    pub fn new(config: Rc<Config>) -> Self {
         Self {
             config,
             event: Gesture::None,
-            debug,
+            xdo_handler: start_handler(),
+            // debug,
         }
     }
 
     pub fn init(&mut self, input: &mut Libinput) -> Result<(), String> {
-        if_debug!(self.debug, &self, &input);
+        // if_debug!(self.debug, &self, &input);
         self.init_ctx(input).expect("Could not initialize libinput");
         if self.has_gesture_device(input) {
             Ok(())
@@ -204,9 +210,9 @@ impl EventHandler {
         input.dispatch().unwrap();
         for event in input.clone() {
             if let Event::Device(e) = event {
-                if_debug!(self.debug, &e);
+                // if_debug!(self.debug, &e);
                 found = e.device().has_capability(DeviceCapability::Gesture);
-                if_debug!(self.debug, found);
+                // if_debug!(self.debug, found);
                 if found {
                     return found;
                 }
@@ -252,7 +258,7 @@ impl EventHandler {
             }
             GestureHoldEvent::End(_e) => {
                 if let Gesture::Hold(s) = &self.event {
-                    if_debug!(self.debug, "Hold", &s.fingers);
+                    // if_debug!(self.debug, "Hold", &s.fingers);
                     for i in &self.config.clone().gestures {
                         if let Gesture::Hold(j) = i {
                             if j.fingers == s.fingers {
@@ -283,7 +289,7 @@ impl EventHandler {
                             if (j.direction == s.direction || j.direction == InOut::Any)
                                 && j.fingers == s.fingers
                             {
-                                if_debug!(self.debug, "oneshot pinch gesture");
+                                // if_debug!(self.debug, "oneshot pinch gesture");
                                 exec_command_from_string(
                                     &j.start.clone().unwrap_or_default(),
                                     0.0,
@@ -299,14 +305,14 @@ impl EventHandler {
                 let scale = e.scale();
                 if let Gesture::Pinch(s) = &self.event {
                     let dir = if scale > 1.0 { InOut::Out } else { InOut::In };
-                    if_debug!(self.debug, &scale, &dir, &s.fingers);
+                    // if_debug!(self.debug, &scale, &dir, &s.fingers);
                     for i in &self.config.clone().gestures {
                         if let Gesture::Pinch(j) = i {
                             if (j.direction == dir || j.direction == InOut::Any)
                                 && j.fingers == s.fingers
                             // && j.repeat == Repeat::Continuous
                             {
-                                if_debug!(self.debug, "continuous pinch gesture");
+                                // if_debug!(self.debug, "continuous pinch gesture");
                                 exec_command_from_string(
                                     &j.update.clone().unwrap_or_default(),
                                     0.0,
@@ -332,7 +338,7 @@ impl EventHandler {
                             if (j.direction == s.direction || j.direction == InOut::Any)
                                 && j.fingers == s.fingers
                             {
-                                if_debug!(self.debug, "oneshot pinch gesture");
+                                // if_debug!(self.debug, "oneshot pinch gesture");
                                 exec_command_from_string(
                                     &j.end.clone().unwrap_or_default(),
                                     0.0,
@@ -358,20 +364,25 @@ impl EventHandler {
                     update: None,
                     start: None,
                     end: None,
+                    acceleration: 1.5,
+                    mouse_up_delay: 900,
                 });
                 if let Gesture::Swipe(s) = &self.event {
                     for i in &self.config.clone().gestures {
                         if let Gesture::Swipe(j) = i {
-                            if j.fingers == s.fingers
-                                && (j.direction == s.direction || j.direction == Direction::Any)
-                            {
-                                exec_command_from_string(
-                                    &j.start.clone().unwrap_or_default(),
-                                    0.0,
-                                    0.0,
-                                    0.0,
-                                )?;
+                            if j.fingers == s.fingers {
+                                if j.direction == Direction::Any {
+                                    self.xdo_handler.mouse_down(1);
+                                } else if j.direction == s.direction {
+                                    exec_command_from_string(
+                                        &j.start.clone().unwrap_or_default(),
+                                        0.0,
+                                        0.0,
+                                        0.0,
+                                    )?;
+                                }
                             }
+                            
                         }
                     }
                 }
@@ -381,21 +392,27 @@ impl EventHandler {
                 let swipe_dir = Direction::dir(x, y);
 
                 if let Gesture::Swipe(s) = &self.event {
-                    if_debug!(self.debug, &swipe_dir, &s.fingers);
+                    // if_debug!(self.debug, &swipe_dir, &s.fingers);
                     for i in &self.config.clone().gestures {
                         if let Gesture::Swipe(j) = i {
-                            if j.fingers == s.fingers
-                                && (j.direction == swipe_dir || j.direction == Direction::Any)
-                            // && j.repeat == Repeat::Continuous
-                            {
-                                exec_command_from_string(
-                                    &j.update.clone().unwrap_or_default(),
-                                    x,
-                                    y,
-                                    0.0,
-                                )?;
+                            if j.fingers == s.fingers {
+                                if j.direction == Direction::Any{
+                                    let x_val: f64;
+                                    let y_val: f64;
+                                    x_val = x * j.acceleration;
+                                    y_val = y * j.acceleration;
+                                    self.xdo_handler.move_mouse_relative(x_val as i32, y_val as i32);
+                                } else if j.direction == swipe_dir {
+                                    exec_command_from_string(
+                                        &j.update.clone().unwrap_or_default(),
+                                        x,
+                                        y,
+                                        0.0,
+                                    )?;
+                                }
                             }
                         }
+                            
                     }
                     self.event = Gesture::Swipe(Swipe {
                         direction: swipe_dir,
@@ -403,6 +420,8 @@ impl EventHandler {
                         update: None,
                         start: None,
                         end: None,
+                        acceleration: 1.5,
+                        mouse_up_delay: 900,
                     })
                 }
             }
@@ -411,8 +430,10 @@ impl EventHandler {
                     if !e.cancelled() {
                         for i in &self.config.clone().gestures {
                             if let Gesture::Swipe(j) = i {
-                                if j.fingers == s.fingers
-                                    && (j.direction == s.direction || j.direction == Direction::Any)
+                                if j.fingers == s.fingers && j.direction == Direction::Any
+                                {
+                                    self.xdo_handler.mouse_up_delay(1, j.mouse_up_delay);
+                                } else if j.fingers == s.fingers && j.direction == s.direction
                                 {
                                     exec_command_from_string(
                                         &j.end.clone().unwrap_or_default(),
