@@ -304,9 +304,7 @@ impl EventHandler {
                         if let Gesture::Pinch(j) = i {
                             if (j.direction == dir || j.direction == InOut::Any)
                                 && j.fingers == s.fingers
-                            // && j.repeat == Repeat::Continuous
                             {
-                                if_debug!(self.debug, "continuous pinch gesture");
                                 exec_command_from_string(
                                     &j.update.clone().unwrap_or_default(),
                                     0.0,
@@ -332,7 +330,6 @@ impl EventHandler {
                             if (j.direction == s.direction || j.direction == InOut::Any)
                                 && j.fingers == s.fingers
                             {
-                                if_debug!(self.debug, "oneshot pinch gesture");
                                 exec_command_from_string(
                                     &j.end.clone().unwrap_or_default(),
                                     0.0,
@@ -386,7 +383,6 @@ impl EventHandler {
                         if let Gesture::Swipe(j) = i {
                             if j.fingers == s.fingers
                                 && (j.direction == swipe_dir || j.direction == Direction::Any)
-                            // && j.repeat == Repeat::Continuous
                             {
                                 exec_command_from_string(
                                     &j.update.clone().unwrap_or_default(),
