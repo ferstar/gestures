@@ -14,10 +14,14 @@ use crate::config::*;
 fn main() -> Result<(), Box<dyn Error>> {
     let app = App::parse();
 
-    let c = config::Config::read_default_config().unwrap_or_else(|_| {
-        eprintln!("Could not read configuration file, using empty config!");
-        Config::default()
-    });
+    let c = if let Some(p) = app.conf {
+        Config::read_from_file(&p)?
+    } else {
+        config::Config::read_default_config().unwrap_or_else(|_| {
+            eprintln!("Could not read configuration file, using empty config!");
+            Config::default()
+        })
+    };
     let debug = app.debug || app.verbose > 0;
     if_debug!(debug, &c);
     let mut eh = gestures::EventHandler::new(Rc::new(c), debug);
