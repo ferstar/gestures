@@ -1,3 +1,11 @@
+> This fork repo mainly focus on the performance of three-figure-dragging feature.
+
+> for more tech details, please vist this discussion: https://github.com/riley-martin/gestures/discussions/6
+
+> My own compiled binaries and configuration can be found at https://github.com/ferstar/gestures/releases/tag/0.3.0
+
+> NOTE: ONLY WORKS ON X11, NO WAYLAND SUPPORT YET!
+---
 # Gestures
 ## About
 This is a program for intercepting touchpad gestures and executing commands based on them.
