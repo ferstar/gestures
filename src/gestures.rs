@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use input::{
     event::{
         gesture::{
@@ -184,13 +184,13 @@ impl EventHandler {
         }
     }
 
-    pub fn init(&mut self, input: &mut Libinput) -> Result<(), String> {
+    pub fn init(&mut self, input: &mut Libinput) -> Result<()> {
         if_debug!(self.debug, &self, &input);
         self.init_ctx(input).expect("Could not initialize libinput");
         if self.has_gesture_device(input) {
             Ok(())
         } else {
-            Err("Could not find gesture device".to_string())
+            bail!("Could not find gesture device");
         }
     }
 

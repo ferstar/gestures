@@ -5,13 +5,14 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
-use std::{error::Error, path::PathBuf, rc::Rc};
+use std::{path::PathBuf, rc::Rc};
 
+use anyhow::Result;
 use clap::Parser;
 
 use crate::config::*;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     let app = App::parse();
 
     let c = if let Some(p) = app.conf {
