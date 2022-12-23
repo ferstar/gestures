@@ -156,7 +156,7 @@ pub struct Pinch {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hold {
     pub fingers: i32,
-    pub action: String,
+    pub action: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -247,7 +247,7 @@ impl EventHandler {
             GestureHoldEvent::Begin(e) => {
                 self.event = Gesture::Hold(Hold {
                     fingers: e.finger_count(),
-                    action: "".to_string(),
+                    action: None,
                 })
             }
             GestureHoldEvent::End(_e) => {
@@ -256,7 +256,12 @@ impl EventHandler {
                     for i in &self.config.clone().gestures {
                         if let Gesture::Hold(j) = i {
                             if j.fingers == s.fingers {
-                                exec_command_from_string(&j.action, 0.0, 0.0, 0.0)?;
+                                exec_command_from_string(
+                                    &j.action.clone().unwrap_or_default(),
+                                    0.0,
+                                    0.0,
+                                    0.0,
+                                )?;
                             }
                         }
                     }
