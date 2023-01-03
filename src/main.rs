@@ -9,23 +9,42 @@ use std::{path::PathBuf, rc::Rc};
 
 use anyhow::Result;
 use clap::Parser;
+use env_logger::Builder;
+use log::LevelFilter;
 
 use crate::config::*;
 
 fn main() -> Result<()> {
     let app = App::parse();
 
+    {
+        let mut l = Builder::from_default_env();
+
+        if app.verbose > 0 {
+            l.filter_level(match app.verbose {
+                1 => LevelFilter::Info,
+                2 => LevelFilter::Debug,
+                _ => LevelFilter::max(),
+            });
+        }
+
+        if app.debug {
+            l.filter_level(LevelFilter::Debug);
+        }
+
+        l.init();
+    }
+
     let c = if let Some(p) = app.conf {
         Config::read_from_file(&p)?
     } else {
         config::Config::read_default_config().unwrap_or_else(|_| {
-            eprintln!("Could not read configuration file, using empty config!");
+            log::error!("Could not read configuration file, using empty config!");
             Config::default()
         })
     };
-    let debug = app.debug || app.verbose > 0;
-    if_debug!(debug, &c);
-    let mut eh = gestures::EventHandler::new(Rc::new(c), debug);
+    log::debug!("{:#?}", &c);
+    let mut eh = gestures::EventHandler::new(Rc::new(c));
     let mut interface = input::Libinput::new_with_udev(gestures::Interface);
     eh.init(&mut interface)?;
     eh.main_loop(&mut interface);

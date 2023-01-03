@@ -23,17 +23,6 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 use crate::utils::exec_command_from_string;
 
-/// Tiny little macro to keep from having to write if statements everywhere
-#[macro_export]
-macro_rules! if_debug {
-    ($d:expr, $($item:expr),*) => {
-        if $d {
-            dbg!($($item,)*);
-            eprintln!();
-        }
-    }
-}
-
 /// Direction of swipe gestures
 ///
 /// NW  N  NE
@@ -172,20 +161,18 @@ pub struct Rotate {
 pub struct EventHandler {
     config: Rc<Config>,
     event: Gesture,
-    debug: bool,
 }
 
 impl EventHandler {
-    pub fn new(config: Rc<Config>, debug: bool) -> Self {
+    pub fn new(config: Rc<Config>) -> Self {
         Self {
             config,
             event: Gesture::None,
-            debug,
         }
     }
 
     pub fn init(&mut self, input: &mut Libinput) -> Result<()> {
-        if_debug!(self.debug, &self, &input);
+        log::debug!("{:?}  {:?}", &self, &input);
         self.init_ctx(input).expect("Could not initialize libinput");
         if self.has_gesture_device(input) {
             Ok(())
@@ -204,9 +191,9 @@ impl EventHandler {
         input.dispatch().unwrap();
         for event in input.clone() {
             if let Event::Device(e) = event {
-                if_debug!(self.debug, &e);
+                log::debug!("{:?}", &e);
                 found = e.device().has_capability(DeviceCapability::Gesture);
-                if_debug!(self.debug, found);
+                log::debug!("{:?}", found);
                 if found {
                     return found;
                 }
@@ -252,7 +239,7 @@ impl EventHandler {
             }
             GestureHoldEvent::End(_e) => {
                 if let Gesture::Hold(s) = &self.event {
-                    if_debug!(self.debug, "Hold", &s.fingers);
+                    log::debug!("Hold  {:?}", &s.fingers);
                     for i in &self.config.clone().gestures {
                         if let Gesture::Hold(j) = i {
                             if j.fingers == s.fingers {
@@ -288,7 +275,7 @@ impl EventHandler {
                             if (j.direction == s.direction || j.direction == InOut::Any)
                                 && j.fingers == s.fingers
                             {
-                                if_debug!(self.debug, "oneshot pinch gesture");
+                                log::debug!("oneshot pinch gesture");
                                 exec_command_from_string(
                                     &j.start.clone().unwrap_or_default(),
                                     0.0,
@@ -304,7 +291,7 @@ impl EventHandler {
                 let scale = e.scale();
                 if let Gesture::Pinch(s) = &self.event {
                     let dir = if scale > 1.0 { InOut::Out } else { InOut::In };
-                    if_debug!(self.debug, &scale, &dir, &s.fingers);
+                    log::debug!("{:?}  {:?}  {:?}", &scale, &dir, &s.fingers);
                     for i in &self.config.clone().gestures {
                         if let Gesture::Pinch(j) = i {
                             if (j.direction == dir || j.direction == InOut::Any)
@@ -383,7 +370,7 @@ impl EventHandler {
                 let swipe_dir = Direction::dir(x, y);
 
                 if let Gesture::Swipe(s) = &self.event {
-                    if_debug!(self.debug, &swipe_dir, &s.fingers);
+                    log::debug!("{:?}  {:?}", &swipe_dir, &s.fingers);
                     for i in &self.config.clone().gestures {
                         if let Gesture::Swipe(j) = i {
                             if j.fingers == s.fingers

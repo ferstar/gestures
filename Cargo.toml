@@ -16,3 +16,5 @@ libc = "0.2"
 nix = {version = "0.25", features = ["poll"]}
 anyhow = "1.0.66"
 regex = "1.7"
+log = "0.4.17"
+env_logger = "0.10.0"
