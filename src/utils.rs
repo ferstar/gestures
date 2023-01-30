@@ -10,7 +10,7 @@ pub fn exec_command_from_string(args: &str, dx: f64, dy: f64, scale: f64) -> Res
     let args = rx.replace_all(&args, format!(" {} ", dx));
     let args = rs.replace_all(&args, format!(" {} ", scale));
     if !&args.is_empty() {
-        crate::if_debug!(true, &args);
+        log::debug!("{:?}", &args);
         Command::new("sh").arg("-c").arg(&*args).spawn()?;
     }
     Ok(())

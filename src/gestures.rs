@@ -1,11 +1,10 @@
-use std::{
-    fs::{File, OpenOptions},
-    os::unix::prelude::{AsRawFd, FromRawFd, IntoRawFd, OpenOptionsExt, RawFd},
-    path::Path,
-    rc::Rc,
-};
+use std::fs::{File, OpenOptions};
+use std::os::fd::AsRawFd;
+use std::os::unix::{fs::OpenOptionsExt, io::OwnedFd};
+use std::path::Path;
+use std::rc::Rc;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use input::{
     event::{
         gesture::{
@@ -16,25 +15,15 @@ use input::{
     },
     DeviceCapability, Libinput, LibinputInterface,
 };
-use libc::{O_RDWR, O_WRONLY};
+
+extern crate libc;
+use libc::{O_RDONLY, O_RDWR, O_WRONLY};
 use nix::poll::{poll, PollFd, PollFlags};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 use crate::xdo_handler::XDoHandler;
-use crate::xdo_handler::start_handler;
 use crate::utils::exec_command_from_string;
-
-/// Tiny little macro to keep from having to write if statements everywhere
-#[macro_export]
-macro_rules! if_debug {
-    ($d:expr, $($item:expr),*) => {
-        if $d {
-            dbg!($($item,)*);
-            eprintln!();
-        }
-    }
-}
 
 /// Direction of swipe gestures
 ///
@@ -144,8 +133,8 @@ pub struct Swipe {
     pub update: Option<String>,
     pub start: Option<String>,
     pub end: Option<String>,
-    pub acceleration: f64,
-    pub mouse_up_delay: i64,
+    pub acceleration: Option<f64>,
+    pub mouse_up_delay: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,7 +149,7 @@ pub struct Pinch {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hold {
     pub fingers: i32,
-    pub action: String,
+    pub action: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -172,12 +161,10 @@ pub struct Rotate {
     pub action: String,
 }
 
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct EventHandler {
     config: Rc<Config>,
     event: Gesture,
-    xdo_handler: XDoHandler,
-    // debug: false,
 }
 
 impl EventHandler {
@@ -185,24 +172,17 @@ impl EventHandler {
         Self {
             config,
             event: Gesture::None,
-            xdo_handler: start_handler(),
-            // debug,
         }
     }
 
-    pub fn init(&mut self, input: &mut Libinput) -> Result<(), String> {
-        // if_debug!(self.debug, &self, &input);
-        self.init_ctx(input).expect("Could not initialize libinput");
+    pub fn init(&mut self, input: &mut Libinput) -> Result<()> {
+        log::debug!("{:?}  {:?}", &self, &input);
+        input.udev_assign_seat("seat0").unwrap();
         if self.has_gesture_device(input) {
             Ok(())
         } else {
-            Err("Could not find gesture device".to_string())
+            bail!("Could not find gesture device");
         }
-    }
-
-    fn init_ctx(&mut self, input: &mut Libinput) -> Result<(), ()> {
-        input.udev_assign_seat("seat0")?;
-        Ok(())
     }
 
     fn has_gesture_device(&mut self, input: &mut Libinput) -> bool {
@@ -210,9 +190,9 @@ impl EventHandler {
         input.dispatch().unwrap();
         for event in input.clone() {
             if let Event::Device(e) = event {
-                // if_debug!(self.debug, &e);
+                log::debug!("{:?}", &e);
                 found = e.device().has_capability(DeviceCapability::Gesture);
-                // if_debug!(self.debug, found);
+                log::debug!("{:?}", found);
                 if found {
                     return found;
                 }
@@ -224,21 +204,21 @@ impl EventHandler {
         found
     }
 
-    pub fn main_loop(&mut self, input: &mut Libinput) {
+    pub fn main_loop(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) {
         let fds = PollFd::new(input.as_raw_fd(), PollFlags::POLLIN);
         while poll(&mut [fds], -1).is_ok() {
-            self.handle_event(input)
+            self.handle_event(input, xdoh)
                 .expect("An Error occurred while handling an event");
         }
     }
 
-    pub fn handle_event(&mut self, input: &mut Libinput) -> Result<()> {
+    pub fn handle_event(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) -> Result<()> {
         input.dispatch().unwrap();
         for event in input.clone() {
             if let Event::Gesture(e) = event {
                 match e {
                     GestureEvent::Pinch(e) => self.handle_pinch_event(e)?,
-                    GestureEvent::Swipe(e) => self.handle_swipe_event(e)?,
+                    GestureEvent::Swipe(e) => self.handle_swipe_event(e, xdoh)?,
                     GestureEvent::Hold(e) => self.handle_hold_event(e)?,
                     _ => (),
                 }
@@ -253,16 +233,21 @@ impl EventHandler {
             GestureHoldEvent::Begin(e) => {
                 self.event = Gesture::Hold(Hold {
                     fingers: e.finger_count(),
-                    action: "".to_string(),
+                    action: None,
                 })
             }
             GestureHoldEvent::End(_e) => {
                 if let Gesture::Hold(s) = &self.event {
-                    // if_debug!(self.debug, "Hold", &s.fingers);
+                    log::debug!("Hold  {:?}", &s.fingers);
                     for i in &self.config.clone().gestures {
                         if let Gesture::Hold(j) = i {
                             if j.fingers == s.fingers {
-                                exec_command_from_string(&j.action, 0.0, 0.0, 0.0)?;
+                                exec_command_from_string(
+                                    &j.action.clone().unwrap_or_default(),
+                                    0.0,
+                                    0.0,
+                                    0.0,
+                                )?;
                             }
                         }
                     }
@@ -289,7 +274,7 @@ impl EventHandler {
                             if (j.direction == s.direction || j.direction == InOut::Any)
                                 && j.fingers == s.fingers
                             {
-                                // if_debug!(self.debug, "oneshot pinch gesture");
+                                log::debug!("oneshot pinch gesture");
                                 exec_command_from_string(
                                     &j.start.clone().unwrap_or_default(),
                                     0.0,
@@ -305,14 +290,12 @@ impl EventHandler {
                 let scale = e.scale();
                 if let Gesture::Pinch(s) = &self.event {
                     let dir = if scale > 1.0 { InOut::Out } else { InOut::In };
-                    // if_debug!(self.debug, &scale, &dir, &s.fingers);
+                    log::debug!("{:?}  {:?}  {:?}", &scale, &dir, &s.fingers);
                     for i in &self.config.clone().gestures {
                         if let Gesture::Pinch(j) = i {
                             if (j.direction == dir || j.direction == InOut::Any)
                                 && j.fingers == s.fingers
-                            // && j.repeat == Repeat::Continuous
                             {
-                                // if_debug!(self.debug, "continuous pinch gesture");
                                 exec_command_from_string(
                                     &j.update.clone().unwrap_or_default(),
                                     0.0,
@@ -338,7 +321,6 @@ impl EventHandler {
                             if (j.direction == s.direction || j.direction == InOut::Any)
                                 && j.fingers == s.fingers
                             {
-                                // if_debug!(self.debug, "oneshot pinch gesture");
                                 exec_command_from_string(
                                     &j.end.clone().unwrap_or_default(),
                                     0.0,
@@ -355,7 +337,7 @@ impl EventHandler {
         Ok(())
     }
 
-    fn handle_swipe_event(&mut self, event: GestureSwipeEvent) -> Result<()> {
+    fn handle_swipe_event(&mut self, event: GestureSwipeEvent, xdoh: &mut XDoHandler) -> Result<()> {
         match event {
             GestureSwipeEvent::Begin(e) => {
                 self.event = Gesture::Swipe(Swipe {
@@ -364,15 +346,15 @@ impl EventHandler {
                     update: None,
                     start: None,
                     end: None,
-                    acceleration: 1.5,
-                    mouse_up_delay: 900,
+                    acceleration: None,
+                    mouse_up_delay: None,
                 });
                 if let Gesture::Swipe(s) = &self.event {
                     for i in &self.config.clone().gestures {
                         if let Gesture::Swipe(j) = i {
                             if j.fingers == s.fingers {
-                                if j.direction == Direction::Any {
-                                    self.xdo_handler.mouse_down(1);
+                                if !&j.acceleration.is_none() && !&j.mouse_up_delay.is_none() && j.direction == Direction::Any {
+                                    xdoh.mouse_down(1);
                                 } else if j.direction == s.direction {
                                     exec_command_from_string(
                                         &j.start.clone().unwrap_or_default(),
@@ -392,16 +374,16 @@ impl EventHandler {
                 let swipe_dir = Direction::dir(x, y);
 
                 if let Gesture::Swipe(s) = &self.event {
-                    // if_debug!(self.debug, &swipe_dir, &s.fingers);
+                    log::debug!("{:?}  {:?}", &swipe_dir, &s.fingers);
                     for i in &self.config.clone().gestures {
                         if let Gesture::Swipe(j) = i {
                             if j.fingers == s.fingers {
-                                if j.direction == Direction::Any{
+                                if !&j.acceleration.is_none() && !&j.mouse_up_delay.is_none() && j.direction == Direction::Any {
                                     let x_val: f64;
                                     let y_val: f64;
-                                    x_val = x * j.acceleration;
-                                    y_val = y * j.acceleration;
-                                    self.xdo_handler.move_mouse_relative(x_val as i32, y_val as i32);
+                                    x_val = x * j.acceleration.clone().unwrap_or_default();
+                                    y_val = y * j.acceleration.clone().unwrap_or_default();
+                                    xdoh.move_mouse_relative(x_val as i32, y_val as i32);
                                 } else if j.direction == swipe_dir {
                                     exec_command_from_string(
                                         &j.update.clone().unwrap_or_default(),
@@ -420,8 +402,8 @@ impl EventHandler {
                         update: None,
                         start: None,
                         end: None,
-                        acceleration: 1.5,
-                        mouse_up_delay: 900,
+                        acceleration: None,
+                        mouse_up_delay: None,
                     })
                 }
             }
@@ -430,17 +412,17 @@ impl EventHandler {
                     if !e.cancelled() {
                         for i in &self.config.clone().gestures {
                             if let Gesture::Swipe(j) = i {
-                                if j.fingers == s.fingers && j.direction == Direction::Any
-                                {
-                                    self.xdo_handler.mouse_up_delay(1, j.mouse_up_delay);
-                                } else if j.fingers == s.fingers && j.direction == s.direction
-                                {
-                                    exec_command_from_string(
-                                        &j.end.clone().unwrap_or_default(),
-                                        0.0,
-                                        0.0,
-                                        0.0,
-                                    )?;
+                                if j.fingers == s.fingers {
+                                    if !&j.acceleration.is_none() && !&j.mouse_up_delay.is_none() && j.direction == Direction::Any {
+                                        xdoh.mouse_up_delay(1, j.mouse_up_delay.clone().unwrap_or_default());
+                                    } else if j.direction == s.direction {
+                                        exec_command_from_string(
+                                            &j.end.clone().unwrap_or_default(),
+                                            0.0,
+                                            0.0,
+                                            0.0,
+                                        )?;
+                                    }
                                 }
                             }
                         }
@@ -456,18 +438,19 @@ impl EventHandler {
 pub struct Interface;
 
 impl LibinputInterface for Interface {
-    fn open_restricted(&mut self, path: &Path, flags: i32) -> Result<RawFd, i32> {
+    fn open_restricted(&mut self, path: &Path, flags: i32) -> Result<OwnedFd, i32> {
         OpenOptions::new()
             .custom_flags(flags)
-            .read((false) | (flags & O_RDWR != 0))
+            .read((flags & O_RDONLY != 0) | (flags & O_RDWR != 0))
             .write((flags & O_WRONLY != 0) | (flags & O_RDWR != 0))
             .open(path)
-            .map(|file| file.into_raw_fd())
+            .map(|file| file.into())
             .map_err(|err| err.raw_os_error().unwrap())
     }
-    fn close_restricted(&mut self, fd: RawFd) {
+    fn close_restricted(&mut self, fd: OwnedFd) {
         unsafe {
-            File::from_raw_fd(fd);
+            File::from(fd);
         }
     }
 }
+
