@@ -71,9 +71,6 @@ impl Direction {
                 sd
             }
         } else {
-            // Don't ask me why, but for libinput the coordinates increase downward. This does
-            // hold out the same as screen coordinates, but it starts in the center instead of
-            // the upper left. I have also noticed game controllers work the same way.
             let sd = if y < 0.0 { Direction::N } else { Direction::S };
             if x.abs() / y.abs() > oblique_ratio {
                 if sd == Direction::N {
