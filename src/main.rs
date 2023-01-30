@@ -16,7 +16,6 @@ use log::LevelFilter;
 use crate::config::*;
 use crate::xdo_handler::start_handler;
 
-
 fn main() -> Result<()> {
     let app = App::parse();
 

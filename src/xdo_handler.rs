@@ -1,20 +1,19 @@
 // via: https://github.com/marsqing/libinput-three-finger-drag/blob/master/src/xdo_handler.rs
+extern crate chrono;
 extern crate libxdo;
 extern crate timer;
-extern crate chrono;
 
+use chrono::Duration;
 use libxdo::XDo;
 use std::sync::mpsc;
 use std::thread;
 use timer::Timer;
-use chrono::Duration;
 
 pub enum XDoCommand {
     MouseUp,
     MouseDown,
     MoveMouseRelative,
 }
-
 
 pub struct XDoHandler {
     tx: mpsc::Sender<(XDoCommand, i32, i32)>,
@@ -46,8 +45,8 @@ pub fn start_handler() -> XDoHandler {
     });
 
     XDoHandler {
-        tx, 
-        timer, 
+        tx,
+        timer,
         guard: None,
         handler_mouse_down: false,
     }
@@ -76,15 +75,20 @@ impl XDoHandler {
 
     pub fn mouse_up_delay(&mut self, button: i32, delay_ms: i64) {
         let tx_clone = self.tx.clone();
-        self.guard = Some(self.timer.schedule_with_delay(Duration::milliseconds(delay_ms), move || {
-            tx_clone.send((XDoCommand::MouseUp, button, 255)).unwrap();
-        }));
+        self.guard = Some(self.timer.schedule_with_delay(
+            Duration::milliseconds(delay_ms),
+            move || {
+                tx_clone.send((XDoCommand::MouseUp, button, 255)).unwrap();
+            },
+        ));
         self.handler_mouse_down = false;
     }
 
     pub fn move_mouse_relative(&mut self, x_val: i32, y_val: i32) {
         self.cancel_timer_if_present();
-        self.tx.send((XDoCommand::MoveMouseRelative, x_val, y_val)).unwrap();
+        self.tx
+            .send((XDoCommand::MoveMouseRelative, x_val, y_val))
+            .unwrap();
     }
 
     pub fn cancel_timer_if_present(&mut self) {

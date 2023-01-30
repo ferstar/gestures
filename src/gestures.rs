@@ -22,8 +22,8 @@ use nix::poll::{poll, PollFd, PollFlags};
 use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
-use crate::xdo_handler::XDoHandler;
 use crate::utils::exec_command_from_string;
+use crate::xdo_handler::XDoHandler;
 
 /// Direction of swipe gestures
 ///
@@ -337,7 +337,11 @@ impl EventHandler {
         Ok(())
     }
 
-    fn handle_swipe_event(&mut self, event: GestureSwipeEvent, xdoh: &mut XDoHandler) -> Result<()> {
+    fn handle_swipe_event(
+        &mut self,
+        event: GestureSwipeEvent,
+        xdoh: &mut XDoHandler,
+    ) -> Result<()> {
         match event {
             GestureSwipeEvent::Begin(e) => {
                 self.event = Gesture::Swipe(Swipe {
@@ -353,7 +357,10 @@ impl EventHandler {
                     for i in &self.config.clone().gestures {
                         if let Gesture::Swipe(j) = i {
                             if j.fingers == s.fingers {
-                                if !&j.acceleration.is_none() && !&j.mouse_up_delay.is_none() && j.direction == Direction::Any {
+                                if !&j.acceleration.is_none()
+                                    && !&j.mouse_up_delay.is_none()
+                                    && j.direction == Direction::Any
+                                {
                                     xdoh.mouse_down(1);
                                 } else if j.direction == s.direction {
                                     exec_command_from_string(
@@ -364,7 +371,6 @@ impl EventHandler {
                                     )?;
                                 }
                             }
-                            
                         }
                     }
                 }
@@ -378,7 +384,10 @@ impl EventHandler {
                     for i in &self.config.clone().gestures {
                         if let Gesture::Swipe(j) = i {
                             if j.fingers == s.fingers {
-                                if !&j.acceleration.is_none() && !&j.mouse_up_delay.is_none() && j.direction == Direction::Any {
+                                if !&j.acceleration.is_none()
+                                    && !&j.mouse_up_delay.is_none()
+                                    && j.direction == Direction::Any
+                                {
                                     let x_val: f64;
                                     let y_val: f64;
                                     x_val = x * j.acceleration.clone().unwrap_or_default();
@@ -394,7 +403,6 @@ impl EventHandler {
                                 }
                             }
                         }
-                            
                     }
                     self.event = Gesture::Swipe(Swipe {
                         direction: swipe_dir,
@@ -413,8 +421,14 @@ impl EventHandler {
                         for i in &self.config.clone().gestures {
                             if let Gesture::Swipe(j) = i {
                                 if j.fingers == s.fingers {
-                                    if !&j.acceleration.is_none() && !&j.mouse_up_delay.is_none() && j.direction == Direction::Any {
-                                        xdoh.mouse_up_delay(1, j.mouse_up_delay.clone().unwrap_or_default());
+                                    if !&j.acceleration.is_none()
+                                        && !&j.mouse_up_delay.is_none()
+                                        && j.direction == Direction::Any
+                                    {
+                                        xdoh.mouse_up_delay(
+                                            1,
+                                            j.mouse_up_delay.clone().unwrap_or_default(),
+                                        );
                                     } else if j.direction == s.direction {
                                         exec_command_from_string(
                                             &j.end.clone().unwrap_or_default(),
@@ -448,9 +462,8 @@ impl LibinputInterface for Interface {
             .map_err(|err| err.raw_os_error().unwrap())
     }
     fn close_restricted(&mut self, fd: OwnedFd) {
-        unsafe {
-            File::from(fd);
+        {
+            let _ = File::from(fd);
         }
     }
 }
-
