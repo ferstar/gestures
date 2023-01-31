@@ -2,7 +2,7 @@
 
 > for more tech details, please vist this discussion: https://github.com/riley-martin/gestures/discussions/6
 
-> My own compiled binaries and configuration can be found at https://github.com/ferstar/gestures/releases/tag/0.3.0
+> My own compiled binaries and configuration can be found at https://github.com/ferstar/gestures/releases
 
 > NOTE: ONLY WORKS ON X11, NO WAYLAND SUPPORT YET!
 ---
