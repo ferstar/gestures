@@ -49,7 +49,7 @@ fn main() -> Result<()> {
     let mut eh = gestures::EventHandler::new(Rc::new(c));
     let mut interface = input::Libinput::new_with_udev(gestures::Interface);
     eh.init(&mut interface)?;
-    eh.main_loop(&mut interface, &mut start_handler());
+    eh.main_loop(&mut interface, &mut start_handler(!app.wayland_disp));
     Ok(())
 }
 
@@ -62,6 +62,10 @@ struct App {
     /// Debug mode
     #[arg(short, long)]
     debug: bool,
+    /// Is Wayland desktop env or not
+    /// (default: Xorg, will use xdotool api directly for better 3-finger-drag performance)
+    #[arg(short, long)]
+    wayland_disp: bool,
     /// Path to config file
     #[arg(short, long, value_name = "FILE")]
     conf: Option<PathBuf>,

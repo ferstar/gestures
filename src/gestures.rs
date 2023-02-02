@@ -357,12 +357,15 @@ impl EventHandler {
                     for i in &self.config.clone().gestures {
                         if let Gesture::Swipe(j) = i {
                             if j.fingers == s.fingers {
-                                if !&j.acceleration.is_none()
+                                if xdoh.is_xorg
+                                    && !&j.acceleration.is_none()
                                     && !&j.mouse_up_delay.is_none()
                                     && j.direction == Direction::Any
                                 {
+                                    log::debug!("Call libxdo api directly in Xorg env for better performance.");
                                     xdoh.mouse_down(1);
-                                } else if j.direction == s.direction {
+                                } else if j.direction == s.direction || j.direction == Direction::Any
+                                {
                                     exec_command_from_string(
                                         &j.start.clone().unwrap_or_default(),
                                         0.0,
@@ -384,7 +387,8 @@ impl EventHandler {
                     for i in &self.config.clone().gestures {
                         if let Gesture::Swipe(j) = i {
                             if j.fingers == s.fingers {
-                                if !&j.acceleration.is_none()
+                                if xdoh.is_xorg
+                                    && !&j.acceleration.is_none()
                                     && !&j.mouse_up_delay.is_none()
                                     && j.direction == Direction::Any
                                 {
@@ -393,7 +397,8 @@ impl EventHandler {
                                     x_val = x * j.acceleration.clone().unwrap_or_default();
                                     y_val = y * j.acceleration.clone().unwrap_or_default();
                                     xdoh.move_mouse_relative(x_val as i32, y_val as i32);
-                                } else if j.direction == swipe_dir {
+                                } else if j.direction == swipe_dir || j.direction == Direction::Any
+                                {
                                     exec_command_from_string(
                                         &j.update.clone().unwrap_or_default(),
                                         x,
@@ -421,7 +426,8 @@ impl EventHandler {
                         for i in &self.config.clone().gestures {
                             if let Gesture::Swipe(j) = i {
                                 if j.fingers == s.fingers {
-                                    if !&j.acceleration.is_none()
+                                    if xdoh.is_xorg
+                                        && !&j.acceleration.is_none()
                                         && !&j.mouse_up_delay.is_none()
                                         && j.direction == Direction::Any
                                     {
@@ -429,7 +435,8 @@ impl EventHandler {
                                             1,
                                             j.mouse_up_delay.clone().unwrap_or_default(),
                                         );
-                                    } else if j.direction == s.direction {
+                                    } else if j.direction == s.direction || j.direction == Direction::Any
+                                    {
                                         exec_command_from_string(
                                             &j.end.clone().unwrap_or_default(),
                                             0.0,

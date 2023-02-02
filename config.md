@@ -27,6 +27,12 @@ The configuration format is based on s-expressions.
       ; `fingers`: basically can be 3 or 4, because less than three libinput does not recognize
       ; as a gesture, and AFAICT more than four are not counted
       (fingers . 3)
+      ; for Wayland 3-finger-drag feature, we need the ydotool's help
+      (update . ("ydotool mousemove_relative -- $delta_x $delta_y"))
+      ; `start`: command to execute on start event
+      (start . ("ydotool click -- 0x40"))
+      ; `end`: command to execute on end event
+      (end . ("ydotool click -- 0x80"))
     )
     (swipe
       ; `direction`: can be N, S, E, W, NE, NW, SE, SW or any

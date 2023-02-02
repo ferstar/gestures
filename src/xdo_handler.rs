@@ -20,35 +20,38 @@ pub struct XDoHandler {
     timer: Timer,
     guard: Option<timer::Guard>,
     handler_mouse_down: bool,
+    pub is_xorg: bool,
 }
 
-pub fn start_handler() -> XDoHandler {
+pub fn start_handler(is_xorg: bool) -> XDoHandler {
     let (tx, rx) = mpsc::channel();
     let timer = Timer::new();
-
-    thread::spawn(move || {
-        let xdo = XDo::new(None).expect("can not initialize libxdo");
-        loop {
-            let (command, param1, param2) = rx.recv().unwrap();
-            match command {
-                XDoCommand::MouseDown => {
-                    xdo.mouse_down(param1).unwrap();
-                }
-                XDoCommand::MouseUp => {
-                    xdo.mouse_up(param1).unwrap();
-                }
-                XDoCommand::MoveMouseRelative => {
-                    xdo.move_mouse_relative(param1, param2).unwrap();
+    if is_xorg {
+        thread::spawn(move || {
+            let xdo = XDo::new(None).expect("can not initialize libxdo");
+            loop {
+                let (command, param1, param2) = rx.recv().unwrap();
+                match command {
+                    XDoCommand::MouseDown => {
+                        xdo.mouse_down(param1).unwrap();
+                    }
+                    XDoCommand::MouseUp => {
+                        xdo.mouse_up(param1).unwrap();
+                    }
+                    XDoCommand::MoveMouseRelative => {
+                        xdo.move_mouse_relative(param1, param2).unwrap();
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
     XDoHandler {
         tx,
         timer,
         guard: None,
         handler_mouse_down: false,
+        is_xorg,
     }
 }
 
