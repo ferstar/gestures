@@ -4,7 +4,9 @@
 
 > My own compiled binaries and configuration can be found at https://github.com/ferstar/gestures/releases
 
-> NOTE: ONLY WORKS ON X11, NO WAYLAND SUPPORT YET!
+> ~~NOTE: ONLY WORKS ON X11, NO WAYLAND SUPPORT YET!~~
+> Now support both Xorg and Wayland(with the help of ydotool power)
+
 ---
 # Gestures
 ## About
