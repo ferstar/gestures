@@ -5,7 +5,6 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::{bail, Result};
 use input::{
     event::{
         gesture::{
@@ -17,8 +16,10 @@ use input::{
     DeviceCapability, Libinput, LibinputInterface,
 };
 use libc::{O_RDWR, O_WRONLY};
+use miette::{miette, Result};
 use nix::poll::{poll, PollFd, PollFlags};
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
+use knuffel::{Decode, DecodeScalar};
 
 use crate::config::Config;
 use crate::utils::exec_command_from_string;
@@ -28,9 +29,8 @@ use crate::utils::exec_command_from_string;
 /// NW  N  NE
 /// W   C   E
 /// SW  S  SE
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(DecodeScalar, Debug, Clone, PartialEq, Eq)]
 pub enum Direction {
-    #[serde(rename = "any")]
     Any,
     N,
     S,
@@ -96,63 +96,77 @@ impl Direction {
 }
 
 /// Direction of pinch gestures
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(DecodeScalar, Debug, Clone, PartialEq, Eq)]
 pub enum InOut {
     In,
     Out,
     Any,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Repeat {
-    Oneshot,
-    Continuous,
-}
+// #[derive(DecodeScalar, Debug, Clone, PartialEq, Eq)]
+// pub enum Repeat {
+//     Oneshot,
+//     Continuous,
+// }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Decode, Debug, Clone, PartialEq)]
 pub enum Gesture {
     Swipe(Swipe),
     Pinch(Pinch),
     Hold(Hold),
-    Rotate(Rotate),
+    // Rotate(Rotate),
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Decode, Debug, Clone, PartialEq, Eq)]
 pub struct Swipe {
+    #[knuffel(property)]
     pub direction: Direction,
+    #[knuffel(property)]
     pub fingers: i32,
+    #[knuffel(property)]
     pub update: Option<String>,
+    #[knuffel(property)]
     pub start: Option<String>,
+    #[knuffel(property)]
     pub end: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Decode, Debug, Clone, PartialEq, Eq)]
 pub struct Pinch {
+    #[knuffel(property)]
     pub fingers: i32,
+    #[knuffel(property)]
     pub direction: InOut,
+    #[knuffel(property)]
     pub update: Option<String>,
+    #[knuffel(property)]
     pub start: Option<String>,
+    #[knuffel(property)]
     pub end: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Decode, Debug, Clone, PartialEq, Eq)]
 pub struct Hold {
+    #[knuffel(property)]
     pub fingers: i32,
+    #[knuffel(property)]
     pub action: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Rotate {
-    pub scale: f64,
-    pub fingers: i32,
-    pub delta_angle: f64,
-    pub repeat: Repeat,
-    pub action: String,
-}
+// #[derive(Decode, Debug, Clone, PartialEq)]
+// pub struct Rotate {
+//     #[knuffel(property)]
+//     pub scale: f64,
+//     #[knuffel(property)]
+//     pub fingers: i32,
+//     #[knuffel(property)]
+//     pub delta_angle: f64,
+//     #[knuffel(property)]
+//     pub repeat: Repeat,
+//     #[knuffel(property)]
+//     pub action: String,
+// }
 
 #[derive(Debug)]
 pub struct EventHandler {
@@ -174,7 +188,7 @@ impl EventHandler {
         if self.has_gesture_device(input) {
             Ok(())
         } else {
-            bail!("Could not find gesture device");
+            Err(miette!("Could not find gesture device"))
         }
     }
 

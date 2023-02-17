@@ -8,7 +8,7 @@ fn test_config_default() {
     assert_eq!(
         c,
         Config {
-            device: None,
+            // device: None,
             gestures: vec![],
         }
     );
