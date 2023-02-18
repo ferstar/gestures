@@ -4,7 +4,6 @@ use std::os::unix::{fs::OpenOptionsExt, io::OwnedFd};
 use std::path::Path;
 use std::rc::Rc;
 
-use anyhow::{bail, Result};
 use input::{
     event::{
         gesture::{
@@ -15,11 +14,11 @@ use input::{
     },
     DeviceCapability, Libinput, LibinputInterface,
 };
-
-extern crate libc;
-use libc::{O_RDONLY, O_RDWR, O_WRONLY};
+use libc::{O_RDWR, O_WRONLY, O_RDONLY};
+use miette::{miette, Result};
 use nix::poll::{poll, PollFd, PollFlags};
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
+use knuffel::{Decode, DecodeScalar};
 
 use crate::config::Config;
 use crate::utils::exec_command_from_string;
@@ -30,9 +29,8 @@ use crate::xdo_handler::XDoHandler;
 /// NW  N  NE
 /// W   C   E
 /// SW  S  SE
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(DecodeScalar, Debug, Clone, PartialEq, Eq)]
 pub enum Direction {
-    #[serde(rename = "any")]
     Any,
     N,
     S,
@@ -73,9 +71,6 @@ impl Direction {
                 sd
             }
         } else {
-            // Don't ask me why, but for libinput the coordinates increase downward. This does
-            // hold out the same as screen coordinates, but it starts in the center instead of
-            // the upper left. I have also noticed game controllers work the same way.
             let sd = if y < 0.0 { Direction::N } else { Direction::S };
             if x.abs() / y.abs() > oblique_ratio {
                 if sd == Direction::N {
@@ -101,65 +96,81 @@ impl Direction {
 }
 
 /// Direction of pinch gestures
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(DecodeScalar, Debug, Clone, PartialEq, Eq)]
 pub enum InOut {
     In,
     Out,
     Any,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Repeat {
-    Oneshot,
-    Continuous,
-}
+// #[derive(DecodeScalar, Debug, Clone, PartialEq, Eq)]
+// pub enum Repeat {
+//     Oneshot,
+//     Continuous,
+// }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Decode, Debug, Clone, PartialEq)]
 pub enum Gesture {
     Swipe(Swipe),
     Pinch(Pinch),
     Hold(Hold),
-    Rotate(Rotate),
+    // Rotate(Rotate),
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Decode, Debug, Clone, PartialEq, Eq)]
 pub struct Swipe {
+    #[knuffel(property)]
     pub direction: Direction,
+    #[knuffel(property)]
     pub fingers: i32,
+    #[knuffel(property)]
     pub update: Option<String>,
+    #[knuffel(property)]
     pub start: Option<String>,
+    #[knuffel(property)]
     pub end: Option<String>,
-    pub acceleration: Option<f64>,
+    #[knuffel(property)]
+    pub acceleration: Option<i8>,
+    #[knuffel(property)]
     pub mouse_up_delay: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Decode, Debug, Clone, PartialEq, Eq)]
 pub struct Pinch {
+    #[knuffel(property)]
     pub fingers: i32,
+    #[knuffel(property)]
     pub direction: InOut,
+    #[knuffel(property)]
     pub update: Option<String>,
+    #[knuffel(property)]
     pub start: Option<String>,
+    #[knuffel(property)]
     pub end: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Decode, Debug, Clone, PartialEq, Eq)]
 pub struct Hold {
+    #[knuffel(property)]
     pub fingers: i32,
+    #[knuffel(property)]
     pub action: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Rotate {
-    pub scale: f64,
-    pub fingers: i32,
-    pub delta_angle: f64,
-    pub repeat: Repeat,
-    pub action: String,
-}
+// #[derive(Decode, Debug, Clone, PartialEq)]
+// pub struct Rotate {
+//     #[knuffel(property)]
+//     pub scale: f64,
+//     #[knuffel(property)]
+//     pub fingers: i32,
+//     #[knuffel(property)]
+//     pub delta_angle: f64,
+//     #[knuffel(property)]
+//     pub repeat: Repeat,
+//     #[knuffel(property)]
+//     pub action: String,
+// }
 
 #[derive(Debug)]
 pub struct EventHandler {
@@ -177,12 +188,17 @@ impl EventHandler {
 
     pub fn init(&mut self, input: &mut Libinput) -> Result<()> {
         log::debug!("{:?}  {:?}", &self, &input);
-        input.udev_assign_seat("seat0").unwrap();
+        self.init_ctx(input).expect("Could not initialize libinput");
         if self.has_gesture_device(input) {
             Ok(())
         } else {
-            bail!("Could not find gesture device");
+            Err(miette!("Could not find gesture device"))
         }
+    }
+
+    fn init_ctx(&mut self, input: &mut Libinput) -> Result<(), ()> {
+        input.udev_assign_seat("seat0")?;
+        Ok(())
     }
 
     fn has_gesture_device(&mut self, input: &mut Libinput) -> bool {
@@ -394,8 +410,8 @@ impl EventHandler {
                                 {
                                     let x_val: f64;
                                     let y_val: f64;
-                                    x_val = x * j.acceleration.clone().unwrap_or_default();
-                                    y_val = y * j.acceleration.clone().unwrap_or_default();
+                                    x_val = x * j.acceleration.unwrap_or_default() as f64 / 10.0;
+                                    y_val = y * j.acceleration.unwrap_or_default() as f64 / 10.0;
                                     xdoh.move_mouse_relative(x_val as i32, y_val as i32);
                                 } else if j.direction == swipe_dir || j.direction == Direction::Any
                                 {

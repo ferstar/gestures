@@ -1,120 +1,52 @@
 # Gestures configuration
 ## Location
-`$HOME/.config/gestures.conf`, `$HOME/.config/gestures/gestures.conf` and `$HOME/.gestures.conf`
-are the configuration locations. They are read in that order, stopping whenever the first one is
-encountered.
-## Format
-The configuration format is based on s-expressions.
+The configuration is looked for at `$XDG_CONFIG_HOME/gestures.kdl` and then at
+`$XDG_CONFIG_HOME/gestures/gestures.kdl`. If `XDG_CONFIG_HOME` is not set, `$HOME/.config` is used
+instead.
 
-```lisp
-(
-  ; device specifies which touchpad device to use. If left empty, selection is automatic.
-  ; Currently HAS NO EFFECT
-  ; (device)
-  ; list of gestures. Available options are `swipe`, `pinch`, `hold` and `rotate`.
-  ; Only `swipe` and `pinch` are currently implemented, others are ignored.
-  ;
-  ; All fields shown are required
-  (gestures
-    (swipe
-      ; `direction`: can be N, S, E, W, NE, NW, SE, SW or any
-      ; Three finger draging
-      (direction . any)
-      ; delay unit: ms
-      (mouse_up_delay . (500))
-      ; pointer acceleration
-      (acceleration . (2))
-      ; `fingers`: basically can be 3 or 4, because less than three libinput does not recognize
-      ; as a gesture, and AFAICT more than four are not counted
-      (fingers . 3)
-      ; for Wayland 3-finger-drag feature, we need the ydotool's help
-      (update . ("ydotool mousemove_relative -- $delta_x $delta_y"))
-      ; `start`: command to execute on start event
-      (start . ("ydotool click -- 0x40"))
-      ; `end`: command to execute on end event
-      (end . ("ydotool click -- 0x80"))
-    )
-    (swipe
-      ; `direction`: can be N, S, E, W, NE, NW, SE, SW or any
-      (direction . W)
-      ; `fingers`: basically can be 3 or 4, because less than three libinput does not recognize
-      ; as a gesture, and AFAICT more than four are not counted
-      (fingers . 4)
-      ; `action`: command to execute on update event. Anything that works with `sh -c` should work here.
-      ; (update . ("xdotool mousemove_relative -- $delta_x $delta_y"))
-      ; `start`: command to execute on start event
-      ; `end`: command to execute on end event
-      (end . ("xdotool key alt+Right"))
-    )
-    (swipe
-      ; `direction`: can be N, S, E, W, NE, NW, SE, SW or any
-      (direction . E)
-      ; `fingers`: basically can be 3 or 4, because less than three libinput does not recognize
-      ; as a gesture, and AFAICT more than four are not counted
-      (fingers . 4)
-      ; `action`: command to execute on update event. Anything that works with `sh -c` should work here.
-      ; `end`: command to execute on end event
-      (end . ("xdotool key alt+Left"))
-    )
-    (swipe
-      ; `direction`: can be N, S, E, W, NE, NW, SE, SW or any
-      (direction . N)
-      ; `fingers`: basically can be 3 or 4, because less than three libinput does not recognize
-      ; as a gesture, and AFAICT more than four are not counted
-      (fingers . 4)
-      ; `action`: command to execute on update event. Anything that works with `sh -c` should work here.
-      ; (update . ("xdotool mousemove_relative -- $delta_x $delta_y"))
-      (update . (""))
-      ; `start`: command to execute on start event
-      (start . (""))
-      ; `end`: command to execute on end event
-      (end . ("xdotool key super+s"))
-    )
-    (swipe
-      ; `direction`: can be N, S, E, W, NE, NW, SE, SW or any
-      (direction . S)
-      ; `fingers`: basically can be 3 or 4, because less than three libinput does not recognize
-      ; as a gesture, and AFAICT more than four are not counted
-      (fingers . 4)
-      ; `action`: command to execute on update event. Anything that works with `sh -c` should work here.
-      ; (update . ("xdotool mousemove_relative -- $delta_x $delta_y"))
-      (update . (""))
-      ; `start`: command to execute on start event
-      (start . (""))
-      ; `end`: command to execute on end event
-      (end . ("xdotool key super+s"))
-    )
-    (pinch
-      ; same as above
-      (fingers . 4)
-      ; `direction`: in or out or any
-      (direction . in)
-      ; same as above
-      (update . (""))
-      ; same as above
-      (start . (""))
-      ; same as above
-      (end . ("xdotool key Ctrl+minus"))
-    )
-    (pinch
-      ; same as above
-      (fingers . 4)
-      ; `direction`: in or out or any
-      (direction . out)
-      ; same as above
-      (update . (""))
-      ; same as above
-      (start . (""))
-      ; same as above
-      (end . ("xdotool key Ctrl+plus"))
-    )
-    ; hold action
-    ; note that only oneshot is supported here
-    (hold
-      (fingers . 4)
-      (action . ("xdotool key Super_L"))
-    )
-  )
-)
-  
+## Format
+The configuration format (since 0.5.0) uses [`kdl`](https://kdl.dev).
+```kdl
+// Swipe requires a direction and fingers field at least
+// direction can be one of "nw", "n", "ne", "w", "any", "e", "sw", "s", or "se"
+// fingers is the number of fingers used to trigger the action
+// start, update, and end are all optional. They are executed with `sh -c` and are executed when
+// the gesture is started, recieves an update event and ends.
+//
+// In all of the fields which execute a shell command, `delta_x`, `delta_y` and `scale` are replaced
+// with the delta in the x and y directions and the scale (movement farther apart or closer together)
+// of the gesture. If they are used for an action in which they do not make sense (e.g. using 
+// `scale` in the swipe gesture, 0.0 is used as the value.)
+//
+
+// For example, this will make a 3-finger-drag in any direction move the mouse(like the macOS 3-finger-drag)
+// Your fingers can temporarily leave the touchpad for up to 500ms before the drag is cancelled.
+// The acceleration is set to 20, which means that the mouse will move 20/10=2 times faster than your current mouse speed.
+// NOTE: This 3-finger-drag config only works on x11,
+// and it only works if you have xdotool installed.
+swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
+
+// The below config may be working on wayland, but I haven't tested it.
+// You need to install ydotool to use it.
+// swipe direction="any" fingers=3 action="ydotool mousemove_relative -- $delta_x $delta_y" start="ydotool click -- 0x40" end="ydotool click -- 0x80"
+
+swipe direction="w" fingers=4 end="xdotool key alt+Right"
+swipe direction="e" fingers=4 end="xdotool key alt+Left"
+
+// This will make a 4-finger swipe up open the application launcher
+// (assuming you have a shortcut for it)
+// The default shortcut for KDE may be "super+w"
+swipe direction="n" fingers=4 update="" start="" end="xdotool key super+s"
+
+// This will make a 4-finger swipe down close the current window
+swipe direction="s" fingers=4 update="" start="" end="xdotool key ctrl+w"
+
+// pinch direction can be "in" or "out". Other fields are the same as for
+// the swipe gesture
+pinch direction="in" fingers=4 end="xdotool key Ctrl+minus"
+pinch direction="out" fingers=4 end="xdotool key Ctrl+plus"
+
+// Hold only has one action, rather than start, end and update, because it does not
+// make much sense to update it.
+// hold fingers=4 action="xdotool key Super_L"
 ```

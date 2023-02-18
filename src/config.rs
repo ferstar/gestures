@@ -1,14 +1,15 @@
 use std::{env, fs, path::Path};
 
-use anyhow::{bail, Result};
-use serde::{Deserialize, Serialize};
-use serde_lexpr::from_str;
+use miette::{bail, IntoDiagnostic, Result};
+// use serde::{Deserialize, Serialize};
+use knuffel::{parse, Decode};
 
 use crate::gestures::Gesture;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Default)]
+#[derive(Decode, PartialEq, Debug, Default)]
 pub struct Config {
-    pub device: Option<String>,
+    // pub device: Option<String>,
+    #[knuffel(children)]
     pub gestures: Vec<Gesture>,
 }
 
@@ -16,31 +17,24 @@ impl Config {
     pub fn read_from_file(file: &Path) -> Result<Self> {
         log::debug!("{:?}", &file);
         match fs::read_to_string(file) {
-            Ok(s) => Ok(from_str(&s)?),
+            Ok(s) => Ok(parse::<Config>(file.to_str().unwrap(), &s).into_diagnostic()?),
             _ => bail!("Could not read config file"),
         }
     }
 
     pub fn read_default_config() -> Result<Self> {
-        let home = env::var("HOME")?;
+        let config_home = env::var("XDG_CONFIG_HOME")
+            .unwrap_or_else(|_| format!("{}/.config", env::var("HOME").unwrap()));
 
-        log::debug!("{:?}", &home);
+        log::debug!("{:?}", &config_home);
 
-        let path = &format!("{}/.config/gestures.conf", home);
-        if let Ok(s) = Self::read_from_file(Path::new(path)) {
-            return Ok(s);
+        for path in ["gestures.kdl", "gestures/gestures.kdl"] {
+            match Self::read_from_file(Path::new(&format!("{config_home}/{path}"))) {
+                Ok(s) => return Ok(s),
+                Err(e) => log::warn!("{}", e),
+            }
         }
 
-        let path = &format!("{}/.config/gestures/gestures.conf", home);
-        if let Ok(s) = Self::read_from_file(Path::new(path)) {
-            return Ok(s);
-        }
-
-        let path = &format!("{}/.gestures.conf", home);
-        if let Ok(s) = Self::read_from_file(Path::new(path)) {
-            return Ok(s);
-        }
-
-        bail!("could not find config file")
+        bail!("Could not find config file")
     }
 }

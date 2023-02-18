@@ -8,10 +8,10 @@ mod tests;
 
 use std::{path::PathBuf, rc::Rc};
 
-use anyhow::Result;
 use clap::Parser;
 use env_logger::Builder;
 use log::LevelFilter;
+use miette::Result;
 
 use crate::config::*;
 use crate::xdo_handler::start_handler;
