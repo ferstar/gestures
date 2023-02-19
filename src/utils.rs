@@ -11,7 +11,13 @@ pub fn exec_command_from_string(args: &str, dx: f64, dy: f64, scale: f64) -> Res
         let args = rx.replace_all(&args, format!(" {dx} "));
         let args = rs.replace_all(&args, format!(" {scale} "));
         log::debug!("{:?}", &args);
-        Command::new("sh").arg("-c").arg(&*args).spawn().into_diagnostic()?;
+        Command::new("sh")
+            .arg("-c")
+            .arg(&*args)
+            .spawn()
+            .into_diagnostic()?
+            .wait()
+            .into_diagnostic()?;
     }
     Ok(())
 }
