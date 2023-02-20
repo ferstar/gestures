@@ -1,7 +1,6 @@
 use std::{env, fs, path::Path};
 
 use miette::{bail, IntoDiagnostic, Result};
-// use serde::{Deserialize, Serialize};
 use knuffel::{parse, Decode};
 
 use crate::gestures::Gesture;

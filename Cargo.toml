@@ -9,7 +9,6 @@ keywords = ["touchpad", "gestures", "libinput", "multitouch", "linux"]
 
 [dependencies]
 clap = { version = "4.1.4", features = ["derive"] }
-serde = { version = "1.0", features = ["derive"] }
 input = "0.8.1"
 libc = "0.2"
 nix = {version = "0.26.2", features = ["poll"]}

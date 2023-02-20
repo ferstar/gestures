@@ -17,7 +17,6 @@ use input::{
 use libc::{O_RDWR, O_WRONLY, O_RDONLY};
 use miette::{miette, Result};
 use nix::poll::{poll, PollFd, PollFlags};
-// use serde::{Deserialize, Serialize};
 use knuffel::{Decode, DecodeScalar};
 
 use crate::config::Config;
