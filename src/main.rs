@@ -19,37 +19,34 @@ use crate::xdo_handler::start_handler;
 fn main() -> Result<()> {
     let app = App::parse();
 
-    {
-        let mut l = Builder::from_default_env();
-
-        if app.verbose > 0 {
-            l.filter_level(match app.verbose {
-                1 => LevelFilter::Info,
-                2 => LevelFilter::Debug,
-                _ => LevelFilter::max(),
-            });
-        }
-
-        if app.debug {
-            l.filter_level(LevelFilter::Debug);
-        }
-
-        l.init();
+    // Set up logging based on verbosity and debug flags
+    let mut logger = Builder::from_default_env();
+    if app.verbose > 0 {
+        logger.filter_level(match app.verbose {
+            1 => LevelFilter::Info,
+            2 => LevelFilter::Debug,
+            _ => LevelFilter::max(),
+        });
     }
+    if app.debug {
+        logger.filter_level(LevelFilter::Debug);
+    }
+    logger.init();
 
-    let c = if let Some(p) = app.conf {
-        Config::read_from_file(&p)?
-    } else {
-        config::Config::read_default_config().unwrap_or_else(|_| {
+    // Load configuration from file or use default
+    let config = app.conf
+        .map_or_else(|| config::Config::read_default_config(), |p| Config::read_from_file(&p))
+        .unwrap_or_else(|_| {
             log::error!("Could not read configuration file, using empty config!");
             Config::default()
-        })
-    };
-    log::debug!("{:#?}", &c);
-    let mut eh = gestures::EventHandler::new(Rc::new(c));
+        });
+
+    log::debug!("{:#?}", &config);
+
+    let mut event_handler = gestures::EventHandler::new(Rc::new(config));
     let mut interface = input::Libinput::new_with_udev(gestures::Interface);
-    eh.init(&mut interface)?;
-    eh.main_loop(&mut interface, &mut start_handler(!app.wayland_disp));
+    event_handler.init(&mut interface)?;
+    event_handler.main_loop(&mut interface, &mut start_handler(!app.wayland_disp));
     Ok(())
 }
 

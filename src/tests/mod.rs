@@ -1,6 +1,4 @@
-use crate::gestures::Direction;
-
-use super::*;
+use crate::{config::Config, gestures::Direction};
 
 #[test]
 fn test_config_default() {
@@ -15,26 +13,24 @@ fn test_config_default() {
 }
 
 #[test]
-fn test_direction_center() {
-    assert_eq!(Direction::Any, Direction::dir(0.0, 0.0));
-}
+fn test_dir() {
+    let test_cases = vec![
+        (0.0, 0.0, Direction::Any),
+        (1.0, 0.0, Direction::E),
+        (-1.0, 0.0, Direction::W),
+        (0.0, 1.0, Direction::S),
+        (0.0, -1.0, Direction::N),
+        (1.0, 1.0, Direction::SE),
+        (-1.0, 1.0, Direction::SW),
+        (1.0, -1.0, Direction::NE),
+        (-1.0, -1.0, Direction::NW),
+        (2.0, 1.0, Direction::SE),
+        (-2.0, 1.0, Direction::SW),
+        (2.0, -1.0, Direction::NE),
+        (-2.0, -1.0, Direction::NW),
+    ];
 
-#[test]
-fn test_direction_n() {
-    assert_eq!(Direction::N, Direction::dir(0.0, -1.0));
-}
-
-#[test]
-fn test_direction_s() {
-    assert_eq!(Direction::S, Direction::dir(0.0, 1.0));
-}
-
-#[test]
-fn test_direction_e() {
-    assert_eq!(Direction::E, Direction::dir(1.0, 0.0));
-}
-
-#[test]
-fn test_direction_w() {
-    assert_eq!(Direction::W, Direction::dir(-1.0, 0.0));
+    for (x, y, expected) in test_cases {
+        assert_eq!(Direction::dir(x, y), expected);
+    }
 }

@@ -62,20 +62,6 @@ impl XDoHandler {
         self.handler_mouse_down = true;
     }
 
-    // pub fn mouse_up(&mut self, button: i32) {
-    //     self.cancel_timer_if_present();
-    //     if self.handler_mouse_down {
-    //         self.tx.send((XDoCommand::MouseUp, button, 255)).unwrap();
-    //         self.handler_mouse_down = false;
-    //     }
-    // }
-
-    // pub fn mouse_up_force(&mut self, button: i32) {
-    //     self.cancel_timer_if_present();
-    //     self.tx.send((XDoCommand::MouseUp, button, 255)).unwrap();
-    //     self.handler_mouse_down = false;
-    // }
-
     pub fn mouse_up_delay(&mut self, button: i32, delay_ms: i64) {
         let tx_clone = self.tx.clone();
         self.guard = Some(self.timer.schedule_with_delay(
@@ -94,13 +80,10 @@ impl XDoHandler {
             .unwrap();
     }
 
-    pub fn cancel_timer_if_present(&mut self) {
-        match &self.guard {
-            Some(_) => {
-                self.guard = None;
-                self.handler_mouse_down = true;
-            }
-            None => (),
+    fn cancel_timer_if_present(&mut self) {
+        if let Some(_) = &self.guard {
+            self.guard = None;
+            self.handler_mouse_down = true;
         }
     }
 }

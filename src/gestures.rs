@@ -42,54 +42,37 @@ pub enum Direction {
 }
 
 impl Direction {
-    // This code is sort of a mess
     pub fn dir(x: f64, y: f64) -> Direction {
         if x.abs() == 0.0 && y.abs() == 0.0 {
             return Direction::Any;
         }
-        let oblique_ratio = 0.414;
-        if x.abs() > y.abs() {
-            let sd = if x < 0.0 { Direction::W } else { Direction::E };
-            if y.abs() / x.abs() > oblique_ratio {
-                if sd == Direction::W {
-                    if y < 0.0 {
-                        Direction::NW
-                    } else {
-                        Direction::SW
-                    }
-                } else if sd == Direction::E {
-                    if y < 0.0 {
-                        Direction::NE
-                    } else {
-                        Direction::SE
-                    }
-                } else {
-                    Direction::Any
-                }
-            } else {
-                sd
+        let oblique_ratio = 1.0 / (1.0 + f64::sqrt(2.0));
+        let primary_direction = if x.abs() > y.abs() {
+            if x < 0.0 { Direction::W } else { Direction::E }
+        } else {
+            if y < 0.0 { Direction::N } else { Direction::S }
+        };
+
+        let (ratio, secondary_direction) = match primary_direction {
+            Direction::N | Direction::S => (x.abs() / y.abs(), if x < 0.0 { Direction::W } else { Direction::E }),
+            Direction::E | Direction::W => (y.abs() / x.abs(), if y < 0.0 { Direction::N } else { Direction::S }),
+            _ => (0.0, Direction::Any),
+        };
+
+        if ratio > oblique_ratio {
+            match (primary_direction, secondary_direction) {
+                (Direction::N, Direction::W) => Direction::NW,
+                (Direction::N, Direction::E) => Direction::NE,
+                (Direction::S, Direction::W) => Direction::SW,
+                (Direction::S, Direction::E) => Direction::SE,
+                (Direction::E, Direction::N) => Direction::NE,
+                (Direction::E, Direction::S) => Direction::SE,
+                (Direction::W, Direction::N) => Direction::NW,
+                (Direction::W, Direction::S) => Direction::SW,
+                _ => Direction::Any,
             }
         } else {
-            let sd = if y < 0.0 { Direction::N } else { Direction::S };
-            if x.abs() / y.abs() > oblique_ratio {
-                if sd == Direction::N {
-                    if x < 0.0 {
-                        Direction::NW
-                    } else {
-                        Direction::NE
-                    }
-                } else if sd == Direction::S {
-                    if x < 0.0 {
-                        Direction::SW
-                    } else {
-                        Direction::SE
-                    }
-                } else {
-                    Direction::Any
-                }
-            } else {
-                sd
-            }
+            primary_direction
         }
     }
 }
@@ -369,20 +352,19 @@ impl EventHandler {
                     mouse_up_delay: None,
                 });
                 if let Gesture::Swipe(s) = &self.event {
-                    for i in &self.config.clone().gestures {
-                        if let Gesture::Swipe(j) = i {
+                    for gesture in &self.config.clone().gestures {
+                        if let Gesture::Swipe(j) = gesture {
                             if j.fingers == s.fingers {
-                                if xdoh.is_xorg
-                                    && !&j.acceleration.is_none()
-                                    && !&j.mouse_up_delay.is_none()
-                                    && j.direction == Direction::Any
-                                {
+                                let is_xorg_condition = xdoh.is_xorg
+                                    && j.acceleration.is_some()
+                                    && j.mouse_up_delay.is_some()
+                                    && j.direction == Direction::Any;
+                                if is_xorg_condition {
                                     log::debug!("Call libxdo api directly in Xorg env for better performance.");
                                     xdoh.mouse_down(1);
-                                } else if j.direction == s.direction || j.direction == Direction::Any
-                                {
+                                } else if j.direction == s.direction || j.direction == Direction::Any {
                                     exec_command_from_string(
-                                        &j.start.clone().unwrap_or_default(),
+                                        &j.start.as_ref().unwrap_or(&String::new()),
                                         0.0,
                                         0.0,
                                         0.0,
@@ -399,23 +381,20 @@ impl EventHandler {
 
                 if let Gesture::Swipe(s) = &self.event {
                     log::debug!("{:?}  {:?}", &swipe_dir, &s.fingers);
-                    for i in &self.config.clone().gestures {
-                        if let Gesture::Swipe(j) = i {
+                    for gesture in &self.config.clone().gestures {
+                        if let Gesture::Swipe(j) = gesture {
                             if j.fingers == s.fingers {
-                                if xdoh.is_xorg
-                                    && !&j.acceleration.is_none()
-                                    && !&j.mouse_up_delay.is_none()
-                                    && j.direction == Direction::Any
-                                {
-                                    let x_val: f64;
-                                    let y_val: f64;
-                                    x_val = x * j.acceleration.unwrap_or_default() as f64 / 10.0;
-                                    y_val = y * j.acceleration.unwrap_or_default() as f64 / 10.0;
+                                let is_xorg_condition = xdoh.is_xorg
+                                    && j.acceleration.is_some()
+                                    && j.mouse_up_delay.is_some()
+                                    && j.direction == Direction::Any;
+                                if is_xorg_condition {
+                                    let x_val = x * j.acceleration.unwrap_or_default() as f64 / 10.0;
+                                    let y_val = y * j.acceleration.unwrap_or_default() as f64 / 10.0;
                                     xdoh.move_mouse_relative(x_val as i32, y_val as i32);
-                                } else if j.direction == swipe_dir || j.direction == Direction::Any
-                                {
+                                } else if j.direction == swipe_dir || j.direction == Direction::Any {
                                     exec_command_from_string(
-                                        &j.update.clone().unwrap_or_default(),
+                                        &j.update.as_ref().unwrap_or(&String::new()),
                                         x,
                                         y,
                                         0.0,
@@ -438,22 +417,21 @@ impl EventHandler {
             GestureSwipeEvent::End(e) => {
                 if let Gesture::Swipe(s) = &self.event {
                     if !e.cancelled() {
-                        for i in &self.config.clone().gestures {
-                            if let Gesture::Swipe(j) = i {
+                        for gesture in &self.config.clone().gestures {
+                            if let Gesture::Swipe(j) = gesture {
                                 if j.fingers == s.fingers {
-                                    if xdoh.is_xorg
-                                        && !&j.acceleration.is_none()
-                                        && !&j.mouse_up_delay.is_none()
-                                        && j.direction == Direction::Any
-                                    {
+                                    let is_xorg_condition = xdoh.is_xorg
+                                        && j.acceleration.is_some()
+                                        && j.mouse_up_delay.is_some()
+                                        && j.direction == Direction::Any;
+                                    if is_xorg_condition {
                                         xdoh.mouse_up_delay(
                                             1,
                                             j.mouse_up_delay.clone().unwrap_or_default(),
                                         );
-                                    } else if j.direction == s.direction || j.direction == Direction::Any
-                                    {
+                                    } else if j.direction == s.direction || j.direction == Direction::Any {
                                         exec_command_from_string(
-                                            &j.end.clone().unwrap_or_default(),
+                                            &j.end.as_ref().unwrap_or(&String::new()),
                                             0.0,
                                             0.0,
                                             0.0,
@@ -473,19 +451,21 @@ impl EventHandler {
 
 pub struct Interface;
 
+
 impl LibinputInterface for Interface {
     fn open_restricted(&mut self, path: &Path, flags: i32) -> Result<OwnedFd, i32> {
+        let read_flag = (flags & O_RDONLY != 0) || (flags & O_RDWR != 0);
+        let write_flag = (flags & O_WRONLY != 0) || (flags & O_RDWR != 0);
+
         OpenOptions::new()
             .custom_flags(flags)
-            .read((flags & O_RDONLY != 0) | (flags & O_RDWR != 0))
-            .write((flags & O_WRONLY != 0) | (flags & O_RDWR != 0))
+            .read(read_flag)
+            .write(write_flag)
             .open(path)
-            .map(|file| file.into())
+            .map(OwnedFd::from)
             .map_err(|err| err.raw_os_error().unwrap())
     }
     fn close_restricted(&mut self, fd: OwnedFd) {
-        {
-            let _ = File::from(fd);
-        }
+        let _ = File::from(fd);
     }
 }

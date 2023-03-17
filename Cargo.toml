@@ -16,7 +16,7 @@ regex = "1.7"
 log = "0.4.17"
 env_logger = "0.10.0"
 miette = { version = "5.5.0", features = ["fancy"] }
-knuffel = "2.0.0"
+knuffel = "3.0.0"
 libxdo = "0.6.0"
 timer = "0.2.0"
 chrono = "0.4.23"
