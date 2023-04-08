@@ -1,6 +1,6 @@
 [package]
 name = "gestures"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 license = "MIT"
 description = "Libinput based touchpad gestures program"
@@ -9,9 +9,10 @@ keywords = ["touchpad", "gestures", "libinput", "multitouch", "linux"]
 
 [dependencies]
 clap = { version = "4.1.4", features = ["derive"] }
-input = "0.8.1"
+input = "0.8.2"
 libc = "0.2"
 nix = {version = "0.26.2", features = ["poll"]}
+anyhow = "1.0.66"
 regex = "1.7"
 log = "0.4.17"
 env_logger = "0.10.0"
@@ -19,4 +20,4 @@ miette = { version = "5.5.0", features = ["fancy"] }
 knuffel = "3.0.0"
 libxdo = "0.6.0"
 timer = "0.2.0"
-chrono = "0.4.23"
+chrono = "0.4.24"

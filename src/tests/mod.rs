@@ -1,4 +1,4 @@
-use crate::{config::Config, gestures::Direction};
+use crate::{config::Config, gestures::SwipeDir};
 
 #[test]
 fn test_config_default() {
@@ -6,7 +6,7 @@ fn test_config_default() {
     assert_eq!(
         c,
         Config {
-            // device: None,
+            // // device: None,
             gestures: vec![],
         }
     );
@@ -15,22 +15,22 @@ fn test_config_default() {
 #[test]
 fn test_dir() {
     let test_cases = vec![
-        (0.0, 0.0, Direction::Any),
-        (1.0, 0.0, Direction::E),
-        (-1.0, 0.0, Direction::W),
-        (0.0, 1.0, Direction::S),
-        (0.0, -1.0, Direction::N),
-        (1.0, 1.0, Direction::SE),
-        (-1.0, 1.0, Direction::SW),
-        (1.0, -1.0, Direction::NE),
-        (-1.0, -1.0, Direction::NW),
-        (2.0, 1.0, Direction::SE),
-        (-2.0, 1.0, Direction::SW),
-        (2.0, -1.0, Direction::NE),
-        (-2.0, -1.0, Direction::NW),
+        (0.0, 0.0, SwipeDir::Any),
+        (1.0, 0.0, SwipeDir::E),
+        (-1.0, 0.0, SwipeDir::W),
+        (0.0, 1.0, SwipeDir::S),
+        (0.0, -1.0, SwipeDir::N),
+        (1.0, 1.0, SwipeDir::SE),
+        (-1.0, 1.0, SwipeDir::SW),
+        (1.0, -1.0, SwipeDir::NE),
+        (-1.0, -1.0, SwipeDir::NW),
+        (2.0, 1.0, SwipeDir::SE),
+        (-2.0, 1.0, SwipeDir::SW),
+        (2.0, -1.0, SwipeDir::NE),
+        (-2.0, -1.0, SwipeDir::NW),
     ];
 
     for (x, y, expected) in test_cases {
-        assert_eq!(Direction::dir(x, y), expected);
+        assert_eq!(SwipeDir::dir(x, y), expected);
     }
 }

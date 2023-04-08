@@ -1,0 +1,52 @@
+name: Test nix build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - '.github/workflows/nix.yml'
+      - 'flake.nix'
+      - 'flake.lock'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - '.github/workflows/nix.yml'
+      - 'flake.nix'
+      - 'flake.lock'
+      
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check_nix:
+    name: Test Nix
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v3
+      - name: Set up cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+            /nix/store
+          key: ${{ runner.os }}-nix-${{ hashFiles('**/*.lock') }}
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+      
+      - name: Check flake
+        run: nix flake check
+      - name: Build with nix
+        run: nix build
