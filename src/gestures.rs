@@ -46,57 +46,37 @@ pub enum SwipeDir {
 }
 
 impl SwipeDir {
-    // This code is sort of a mess
     pub fn dir(x: f64, y: f64) -> SwipeDir {
         if x.abs() == 0.0 && y.abs() == 0.0 {
             return SwipeDir::Any;
         }
-        let oblique_ratio = 0.414;
-        if x.abs() > y.abs() {
-            let sd = if x < 0.0 { SwipeDir::W } else { SwipeDir::E };
-            if y.abs() / x.abs() > oblique_ratio {
-                if sd == SwipeDir::W {
-                    if y < 0.0 {
-                        SwipeDir::NW
-                    } else {
-                        SwipeDir::SW
-                    }
-                } else if sd == SwipeDir::E {
-                    if y < 0.0 {
-                        SwipeDir::NE
-                    } else {
-                        SwipeDir::SE
-                    }
-                } else {
-                    SwipeDir::Any
-                }
-            } else {
-                sd
+        let oblique_ratio = 1.0 / (1.0 + f64::sqrt(2.0));
+        let primary_direction = if x.abs() > y.abs() {
+            if x < 0.0 { SwipeDir::W } else { SwipeDir::E }
+        } else {
+            if y < 0.0 { SwipeDir::N } else { SwipeDir::S }
+        };
+
+        let (ratio, secondary_direction) = match primary_direction {
+            SwipeDir::N | SwipeDir::S => (x.abs() / y.abs(), if x < 0.0 { SwipeDir::W } else { SwipeDir::E }),
+            SwipeDir::E | SwipeDir::W => (y.abs() / x.abs(), if y < 0.0 { SwipeDir::N } else { SwipeDir::S }),
+            _ => (0.0, SwipeDir::Any),
+        };
+
+        if ratio > oblique_ratio {
+            match (primary_direction, secondary_direction) {
+                (SwipeDir::N, SwipeDir::W) => SwipeDir::NW,
+                (SwipeDir::N, SwipeDir::E) => SwipeDir::NE,
+                (SwipeDir::S, SwipeDir::W) => SwipeDir::SW,
+                (SwipeDir::S, SwipeDir::E) => SwipeDir::SE,
+                (SwipeDir::E, SwipeDir::N) => SwipeDir::NE,
+                (SwipeDir::E, SwipeDir::S) => SwipeDir::SE,
+                (SwipeDir::W, SwipeDir::N) => SwipeDir::NW,
+                (SwipeDir::W, SwipeDir::S) => SwipeDir::SW,
+                _ => SwipeDir::Any,
             }
         } else {
-            // Don't ask me why, but for libinput the coordinates increase downward. This does
-            // hold out the same as screen coordinates, but it starts in the center instead of
-            // the upper left. I have also noticed game controllers work the same way.
-            let sd = if y < 0.0 { SwipeDir::N } else { SwipeDir::S };
-            if x.abs() / y.abs() > oblique_ratio {
-                if sd == SwipeDir::N {
-                    if x < 0.0 {
-                        SwipeDir::NW
-                    } else {
-                        SwipeDir::NE
-                    }
-                } else if sd == SwipeDir::S {
-                    if x < 0.0 {
-                        SwipeDir::SW
-                    } else {
-                        SwipeDir::SE
-                    }
-                } else {
-                    SwipeDir::Any
-                }
-            } else {
-                sd
-            }
+            primary_direction
         }
     }
 }
