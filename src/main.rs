@@ -1,7 +1,5 @@
 mod config;
 mod gestures;
-mod ipc;
-mod ipc_client;
 mod utils;
 mod xdo_handler;
 
@@ -14,7 +12,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use env_logger::Builder;
 use log::LevelFilter;
 use miette::Result;
@@ -53,12 +51,7 @@ fn main() -> Result<()> {
     };
     log::debug!("{:#?}", &c);
 
-    match app.command {
-        c @ Commands::Reload => {
-            ipc_client::handle_command(c);
-        }
-        Commands::Start => run_eh(Arc::new(RwLock::new(c)), app.wayland_disp)?,
-    }
+    run_eh(Arc::new(RwLock::new(c)), app.wayland_disp)?;
 
     Ok(())
 }
@@ -78,8 +71,6 @@ fn run_eh(config: Arc<RwLock<Config>>, is_wayland: bool) -> Result<()> {
             Ok(())
         });
     }
-
-    ipc::create_socket(config);
 
     eh_thread.join().unwrap()?;
     Ok(())
@@ -101,14 +92,4 @@ struct App {
     /// Path to config file
     #[arg(short, long, value_name = "FILE")]
     conf: Option<PathBuf>,
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum Commands {
-    /// Reload the configuration
-    Reload,
-    /// Start the program
-    Start,
 }
