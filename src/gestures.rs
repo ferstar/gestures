@@ -47,10 +47,10 @@ pub enum SwipeDir {
 
 impl SwipeDir {
     pub fn dir(x: f64, y: f64) -> SwipeDir {
-        if x.abs() == 0.0 && y.abs() == 0.0 {
+        if x == 0.0 && y == 0.0 {
             return SwipeDir::Any;
         }
-        let oblique_ratio = 1.0 / (1.0 + f64::sqrt(2.0));
+
         let primary_direction = if x.abs() > y.abs() {
             if x < 0.0 { SwipeDir::W } else { SwipeDir::E }
         } else {
@@ -63,16 +63,12 @@ impl SwipeDir {
             _ => (0.0, SwipeDir::Any),
         };
 
-        if ratio > oblique_ratio {
+        if ratio > 0.4142 {
             match (primary_direction, secondary_direction) {
-                (SwipeDir::N, SwipeDir::W) => SwipeDir::NW,
-                (SwipeDir::N, SwipeDir::E) => SwipeDir::NE,
-                (SwipeDir::S, SwipeDir::W) => SwipeDir::SW,
-                (SwipeDir::S, SwipeDir::E) => SwipeDir::SE,
-                (SwipeDir::E, SwipeDir::N) => SwipeDir::NE,
-                (SwipeDir::E, SwipeDir::S) => SwipeDir::SE,
-                (SwipeDir::W, SwipeDir::N) => SwipeDir::NW,
-                (SwipeDir::W, SwipeDir::S) => SwipeDir::SW,
+                (SwipeDir::N, SwipeDir::W) | (SwipeDir::W, SwipeDir::N) => SwipeDir::NW,
+                (SwipeDir::N, SwipeDir::E) | (SwipeDir::E, SwipeDir::N) => SwipeDir::NE,
+                (SwipeDir::S, SwipeDir::W) | (SwipeDir::W, SwipeDir::S) => SwipeDir::SW,
+                (SwipeDir::S, SwipeDir::E) | (SwipeDir::E, SwipeDir::S) => SwipeDir::SE,
                 _ => SwipeDir::Any,
             }
         } else {
