@@ -1,4 +1,5 @@
-use crate::{config::Config, gestures::SwipeDir};
+use crate::config::Config;
+use crate::gestures::swipe::SwipeDir;
 
 #[test]
 fn test_config_default() {

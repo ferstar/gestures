@@ -1,6 +1,6 @@
 > This fork repo mainly focus on the performance of three-figure-dragging feature.
 
-> for more tech details, please vist this discussion: https://github.com/riley-martin/gestures/discussions/6
+> for more tech details, please vist this discussion: https://github.com/ferstar/gestures/discussions/6
 
 > My own compiled binaries and configuration can be found at https://github.com/ferstar/gestures/releases
 
@@ -34,25 +34,32 @@ Linux. The testing workflow runs on Ubuntu and I test it myself on ~~Artix Linux
 `libinput` touchpad driver rather than the older `synaptics` driver.  
 Note: If your DE/WM has its own touchpad gestures system, it may need to be disabled to
 prevent conflicts.
+### Nix
+If you are using flakes, simply add `gestures.url = "github:ferstar/gestures";` to your flake inputs
+and add `inputs.gestures.packages.${system}.gestures` to your `home.packages` or `environment.systemPackages`. You can also create a service in
+`systemd.user.services`.
+
 ### Dependencies
 You may need to install `libudev` and `libinput`, or their equivalant for your distro, and possibly the `dev` versions as well.
+
 ### With Cargo
-If you have cargo installed, simply use `cargo install gestures`
+If you have cargo installed, simply use `cargo install --git https://github.com/ferstar/gestures.git`
+
 ### Manual installation
 - Clone the repo
-  - `git clone https://github.com/riley-martin/gestures && cd gestures`
+  - `git clone https://github.com/ferstar/gestures && cd gestures`
 
 - Build
   - `cargo build --release`
 
 - Copy `./target/release/gestures` to a convenient place and execute it
+
 ### Autostart
-#### Compositor/WM
-You can start `gestures` in your `.xinitrc` or other startup files (like sway config file, for example)
 #### Systemd
 Drop [examples/gestures.service](./examples/gestures.service) into `~/.config/systemd/user/gestures.service`
 and modify it for your system (mainly the "$HOME" environment variable and the `ExecStart` will need changed).
 To have it start automatically, run `systemctl --user enable --now gestures.service`.
+
 #### Other init systems
 I haven't used any other init systems, but the service is quite simple so it should be easy to modify
 for other systems.
@@ -68,5 +75,3 @@ Only supports swipe gestures
 Fork of gebaar which supports other gestures
 - [fusuma](https://github.com/iberianpig/fusuma)
 Also parses `libinput debug-events` output
-
-

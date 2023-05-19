@@ -1,13 +1,13 @@
 [Unit]
-Description=Touchpad Gestures
-Documentation=https://github.com/riley-martin/gestures
+Description=Touchpad Gestures(with 3-finger drag performance improvements)
+Documentation=https://github.com/ferstar/gestures
 
 [Service]
 Environment=PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/bin
 Environment=DISPLAY=:0
-Environment=HOME=/home/riley
+Environment=HOME=$HOME
 Type=simple
-ExecStart=/home/riley/.cargo/bin/gestures
+ExecStart=$HOME/.cargo/bin/gestures
 Restart=never
 
 [Install]

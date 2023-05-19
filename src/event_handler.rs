@@ -18,143 +18,15 @@ use input::{
     },
     DeviceCapability, Libinput, LibinputInterface,
 };
-use knuffel::{Decode, DecodeScalar};
-use libc::{O_RDONLY, O_RDWR, O_WRONLY};
+use libc::{O_RDWR, O_WRONLY, O_RDONLY};
 use miette::{miette, Result};
 use nix::poll::{poll, PollFd, PollFlags};
+// use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
-use crate::utils::exec_command_from_string;
+use crate::gestures::{hold::*, pinch::*, swipe::*, *};
 use crate::xdo_handler::XDoHandler;
-
-/// Direction of swipe gestures
-///
-/// NW  N  NE
-/// W   C   E
-/// SW  S  SE
-#[derive(DecodeScalar, Debug, Clone, PartialEq, Eq)]
-pub enum SwipeDir {
-    Any,
-    N,
-    S,
-    E,
-    W,
-    NE,
-    NW,
-    SE,
-    SW,
-}
-
-impl SwipeDir {
-    pub fn dir(x: f64, y: f64) -> SwipeDir {
-        if x == 0.0 && y == 0.0 {
-            return SwipeDir::Any;
-        }
-
-        let primary_direction = if x.abs() > y.abs() {
-            if x < 0.0 { SwipeDir::W } else { SwipeDir::E }
-        } else {
-            if y < 0.0 { SwipeDir::N } else { SwipeDir::S }
-        };
-
-        let (ratio, secondary_direction) = match primary_direction {
-            SwipeDir::N | SwipeDir::S => (x.abs() / y.abs(), if x < 0.0 { SwipeDir::W } else { SwipeDir::E }),
-            SwipeDir::E | SwipeDir::W => (y.abs() / x.abs(), if y < 0.0 { SwipeDir::N } else { SwipeDir::S }),
-            _ => (0.0, SwipeDir::Any),
-        };
-
-        if ratio > 0.4142 {
-            match (primary_direction, secondary_direction) {
-                (SwipeDir::N, SwipeDir::W) | (SwipeDir::W, SwipeDir::N) => SwipeDir::NW,
-                (SwipeDir::N, SwipeDir::E) | (SwipeDir::E, SwipeDir::N) => SwipeDir::NE,
-                (SwipeDir::S, SwipeDir::W) | (SwipeDir::W, SwipeDir::S) => SwipeDir::SW,
-                (SwipeDir::S, SwipeDir::E) | (SwipeDir::E, SwipeDir::S) => SwipeDir::SE,
-                _ => SwipeDir::Any,
-            }
-        } else {
-            primary_direction
-        }
-    }
-}
-
-/// Direction of pinch gestures
-#[derive(DecodeScalar, Debug, Clone, PartialEq, Eq)]
-pub enum PinchDir {
-    In,
-    Out,
-    Clockwise,
-    CounterClockwise,
-    Any,
-}
-
-impl PinchDir {
-    pub fn dir(scale: f64, delta_angle: f64) -> Self {
-        // If the scale is low enough, see if there is any rotation
-        // These values seem to work fairly well overall
-        // But maybe could be improved by checking here for large rotation
-        if (scale > 0.92) && (scale < 1.08) {
-            if delta_angle > 0.0 {
-                Self::Clockwise
-            } else {
-                Self::CounterClockwise
-            }
-        // Otherwise we have a normal pinch
-        } else if scale > 1.0 {
-            Self::Out
-        } else {
-            Self::In
-        }
-    }
-}
-
-#[derive(Decode, Debug, Clone, PartialEq)]
-pub enum Gesture {
-    Swipe(Swipe),
-    Pinch(Pinch),
-    Hold(Hold),
-    // Rotate(Rotate),
-    None,
-}
-
-#[derive(Decode, Debug, Clone, PartialEq, Eq)]
-pub struct Swipe {
-    #[knuffel(property)]
-    pub direction: SwipeDir,
-    #[knuffel(property)]
-    pub fingers: i32,
-    #[knuffel(property)]
-    pub update: Option<String>,
-    #[knuffel(property)]
-    pub start: Option<String>,
-    #[knuffel(property)]
-    pub end: Option<String>,
-    #[knuffel(property)]
-    pub acceleration: Option<i8>,
-    #[knuffel(property)]
-    pub mouse_up_delay: Option<i64>,
-}
-
-#[derive(Decode, Debug, Clone, PartialEq, Eq)]
-pub struct Pinch {
-    #[knuffel(property)]
-    pub fingers: i32,
-    #[knuffel(property)]
-    pub direction: PinchDir,
-    #[knuffel(property)]
-    pub update: Option<String>,
-    #[knuffel(property)]
-    pub start: Option<String>,
-    #[knuffel(property)]
-    pub end: Option<String>,
-}
-
-#[derive(Decode, Debug, Clone, PartialEq, Eq)]
-pub struct Hold {
-    #[knuffel(property)]
-    pub fingers: i32,
-    #[knuffel(property)]
-    pub action: Option<String>,
-}
+use crate::utils::exec_command_from_string;
 
 #[derive(Debug)]
 pub struct EventHandler {

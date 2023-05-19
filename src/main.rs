@@ -1,5 +1,8 @@
 mod config;
+mod event_handler;
 mod gestures;
+mod ipc;
+mod ipc_client;
 mod utils;
 mod xdo_handler;
 
@@ -12,7 +15,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use env_logger::Builder;
 use log::LevelFilter;
 use miette::Result;
@@ -51,7 +54,12 @@ fn main() -> Result<()> {
     };
     log::debug!("{:#?}", &c);
 
-    run_eh(Arc::new(RwLock::new(c)), app.wayland_disp)?;
+    match app.command {
+        c @ Commands::Reload => {
+            ipc_client::handle_command(c);
+        }
+        Commands::Start => run_eh(Arc::new(RwLock::new(c)), app.wayland_disp)?,
+    }
 
     Ok(())
 }
@@ -64,13 +72,15 @@ fn run_eh(config: Arc<RwLock<Config>>, is_wayland: bool) -> Result<()> {
         let is_wayland = is_wayland.clone();
         eh_thread = thread::spawn(move || -> Result<()> {
             log::debug!("Starting event handler in new thread");
-            let mut eh = gestures::EventHandler::new(config);
-            let mut interface = input::Libinput::new_with_udev(gestures::Interface);
+            let mut eh = event_handler::EventHandler::new(config);
+            let mut interface = input::Libinput::new_with_udev(event_handler::Interface);
             eh.init(&mut interface)?;
             eh.main_loop(&mut interface, &mut start_handler(!is_wayland));
             Ok(())
         });
     }
+
+    ipc::create_socket(config);
 
     eh_thread.join().unwrap()?;
     Ok(())
@@ -92,4 +102,14 @@ struct App {
     /// Path to config file
     #[arg(short, long, value_name = "FILE")]
     conf: Option<PathBuf>,
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    /// Reload the configuration
+    Reload,
+    /// Start the program
+    Start,
 }

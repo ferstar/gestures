@@ -4,10 +4,6 @@ The configuration is looked for at `$XDG_CONFIG_HOME/gestures.kdl` and then at
 `$XDG_CONFIG_HOME/gestures/gestures.kdl`. If `XDG_CONFIG_HOME` is not set, `$HOME/.config` is used
 instead.
 
-The configuration is looked for at `$XDG_CONFIG_HOME/gestures.kdl` and then at
-`$XDG_CONFIG_HOME/gestures/gestures.kdl`. If `XDG_CONFIG_HOME` is not set, `$HOME/.config` is used
-instead.
-
 ## Format
 The configuration format (since 0.5.0) uses [`kdl`](https://kdl.dev).
 ```kdl
