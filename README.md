@@ -1,8 +1,10 @@
 > This fork repo mainly focus on the performance of three-figure-dragging feature.
 
-> for more tech details, please vist this discussion: https://github.com/ferstar/gestures/discussions/6
+> for more tech details, please vist this discussion: https://github.com/riley-martin/gestures/discussions/6
 
-> My own compiled binaries and configuration can be found at https://github.com/ferstar/gestures/releases
+> My own compiled binaries(maybe not too synchronized with the latest source code）and configuration can be found at https://github.com/ferstar/gestures/releases
+
+> OR, you can install(compile) it with cargo by yourself like this: cargo install --git https://github.com/ferstar/gestures.git
 
 > ~~NOTE: ONLY WORKS ON X11, NO WAYLAND SUPPORT YET!~~
 > Now support both Xorg and Wayland(with the help of ydotool power)
