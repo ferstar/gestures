@@ -1,8 +1,8 @@
 use std::{
     fs::OpenOptions,
     os::{
-        fd::OwnedFd,
-        unix::prelude::{AsRawFd, IntoRawFd, OpenOptionsExt},
+        fd::{AsFd, OwnedFd},
+        unix::prelude::{IntoRawFd, OpenOptionsExt},
     },
     path::Path,
     sync::{Arc, RwLock},
@@ -23,7 +23,6 @@ use nix::{
     fcntl::OFlag,
     poll::{poll, PollFd, PollFlags},
 };
-// use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 use crate::gestures::{hold::*, pinch::*, swipe::*, *};
@@ -80,9 +79,11 @@ impl EventHandler {
     }
 
     pub fn main_loop(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) {
-        let fds = PollFd::new(input.as_raw_fd(), PollFlags::POLLIN);
+        let mut cloned = input.clone();
+        let fd = input.as_fd();
+        let fds = PollFd::new(&fd, PollFlags::POLLIN);
         while poll(&mut [fds], -1).is_ok() {
-            self.handle_event(input, xdoh)
+            self.handle_event(&mut cloned, xdoh)
                 .expect("An Error occurred while handling an event");
         }
     }
@@ -353,7 +354,7 @@ impl LibinputInterface for Interface {
             .read((false) | (flags & OFlag::O_RDWR.bits() != 0))
             .write((flags & OFlag::O_WRONLY.bits() != 0) | (flags & OFlag::O_RDWR.bits() != 0))
             .open(path)
-            .map(|file| file.try_into().unwrap())
+            .map(|file| file.into())
             .map_err(|err| err.raw_os_error().unwrap())
     }
     fn close_restricted(&mut self, fd: OwnedFd) {
