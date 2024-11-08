@@ -78,13 +78,20 @@ impl EventHandler {
         found
     }
 
-    pub fn main_loop(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) {
-        let mut cloned = input.clone();
-        let fd = input.as_fd();
-        let fds = PollFd::new(fd, PollFlags::POLLIN);
-        while poll(&mut [fds], PollTimeout::NONE).is_ok() {
-            self.handle_event(&mut cloned, xdoh)
-                .expect("An Error occurred while handling an event");
+    pub fn main_loop(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) -> Result<()> {
+        loop {
+            let mut fds = [PollFd::new(input.as_fd(), PollFlags::POLLIN)];
+            match poll(&mut fds, PollTimeout::NONE) {
+                Ok(_) => {
+                    self.handle_event(input, xdoh)?;
+                }
+                Err(e) => {
+                    // Only break if it's not an interrupt
+                    if e != nix::errno::Errno::EINTR {
+                        return Err(miette!("Poll error: {}", e));
+                    }
+                }
+            }
         }
     }
 

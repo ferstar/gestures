@@ -75,7 +75,7 @@ fn run_eh(config: Arc<RwLock<Config>>, is_wayland: bool) -> Result<()> {
             let mut eh = event_handler::EventHandler::new(config);
             let mut interface = input::Libinput::new_with_udev(event_handler::Interface);
             eh.init(&mut interface)?;
-            eh.main_loop(&mut interface, &mut start_handler(!is_wayland));
+            let _ = eh.main_loop(&mut interface, &mut start_handler(!is_wayland));
             Ok(())
         });
     }
