@@ -357,13 +357,16 @@ impl LibinputInterface for Interface {
     fn open_restricted(&mut self, path: &Path, flags: i32) -> Result<OwnedFd, i32> {
         OpenOptions::new()
             .custom_flags(flags)
-            .read((false) | (flags & OFlag::O_RDWR.bits() != 0))
+            .read(flags & OFlag::O_RDWR.bits() != 0)
             .write((flags & OFlag::O_WRONLY.bits() != 0) | (flags & OFlag::O_RDWR.bits() != 0))
             .open(path)
-            .map(|file| file.into())
-            .map_err(|err| err.raw_os_error().unwrap())
+            .map(Into::into)
+            .map_err(|err| err.raw_os_error().unwrap_or(-1))
     }
+
     fn close_restricted(&mut self, fd: OwnedFd) {
-        nix::unistd::close(fd.into_raw_fd()).unwrap();
+        if let Err(e) = nix::unistd::close(fd.into_raw_fd()) {
+            log::error!("Failed to close file descriptor: {}", e);
+        }
     }
 }
