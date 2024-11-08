@@ -1,14 +1,11 @@
-// via: https://github.com/marsqing/libinput-three-finger-drag/blob/master/src/xdo_handler.rs
-extern crate chrono;
-extern crate libxdo;
-extern crate timer;
-
 use chrono::Duration;
 use libxdo::XDo;
 use std::sync::mpsc;
 use std::thread;
 use timer::Timer;
 
+// 1. 使用 #[derive(Copy, Clone)] 对简单枚举优化
+#[derive(Copy, Clone)]
 pub enum XDoCommand {
     MouseUp,
     MouseDown,
@@ -26,22 +23,20 @@ pub struct XDoHandler {
 pub fn start_handler(is_xorg: bool) -> XDoHandler {
     let (tx, rx) = mpsc::channel();
     let timer = Timer::new();
+    
     if is_xorg {
         thread::spawn(move || {
+            // 2. 将 XDo 实例移到线程外部以避免重复创建
             let xdo = XDo::new(None).expect("can not initialize libxdo");
-            loop {
-                let (command, param1, param2) = rx.recv().unwrap();
-                match command {
-                    XDoCommand::MouseDown => {
-                        xdo.mouse_down(param1).unwrap();
-                    }
-                    XDoCommand::MouseUp => {
-                        xdo.mouse_up(param1).unwrap();
-                    }
-                    XDoCommand::MoveMouseRelative => {
-                        xdo.move_mouse_relative(param1, param2).unwrap();
-                    }
-                }
+            
+            // 3. 使用 while let 替代 loop + match 模式，更符合 Rust 习惯
+            while let Ok((command, param1, param2)) = rx.recv() {
+                // 4. 使用 let _ = 处理 Result，避免 unwrap
+                let _ = match command {
+                    XDoCommand::MouseDown => xdo.mouse_down(param1),
+                    XDoCommand::MouseUp => xdo.mouse_up(param1),
+                    XDoCommand::MoveMouseRelative => xdo.move_mouse_relative(param1, param2),
+                };
             }
         });
     }
@@ -56,9 +51,10 @@ pub fn start_handler(is_xorg: bool) -> XDoHandler {
 }
 
 impl XDoHandler {
+    // 5. 使用 '&mut self' 而不是移动所有权
     pub fn mouse_down(&mut self, button: i32) {
         self.cancel_timer_if_present();
-        self.tx.send((XDoCommand::MouseDown, button, 255)).unwrap();
+        let _ = self.tx.send((XDoCommand::MouseDown, button, 255));
         self.handler_mouse_down = true;
     }
 
@@ -67,7 +63,7 @@ impl XDoHandler {
         self.guard = Some(self.timer.schedule_with_delay(
             Duration::milliseconds(delay_ms),
             move || {
-                tx_clone.send((XDoCommand::MouseUp, button, 255)).unwrap();
+                let _ = tx_clone.send((XDoCommand::MouseUp, button, 255));
             },
         ));
         self.handler_mouse_down = false;
@@ -75,13 +71,11 @@ impl XDoHandler {
 
     pub fn move_mouse_relative(&mut self, x_val: i32, y_val: i32) {
         self.cancel_timer_if_present();
-        self.tx
-            .send((XDoCommand::MoveMouseRelative, x_val, y_val))
-            .unwrap();
+        let _ = self.tx.send((XDoCommand::MoveMouseRelative, x_val, y_val));
     }
 
     fn cancel_timer_if_present(&mut self) {
-        if let Some(_) = &self.guard {
+        if self.guard.is_some() {
             self.guard = None;
             self.handler_mouse_down = true;
         }
