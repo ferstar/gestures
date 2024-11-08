@@ -65,25 +65,21 @@ fn main() -> Result<()> {
 }
 
 fn run_eh(config: Arc<RwLock<Config>>, is_wayland: bool) -> Result<()> {
-    let eh_thread: JoinHandle<Result<()>>;
-
-    {
-        let config = config.clone();
-        let is_wayland = is_wayland.clone();
-        eh_thread = thread::spawn(move || -> Result<()> {
-            log::debug!("Starting event handler in new thread");
-            let mut eh = event_handler::EventHandler::new(config);
-            let mut interface = input::Libinput::new_with_udev(event_handler::Interface);
-            eh.init(&mut interface)?;
-            let _ = eh.main_loop(&mut interface, &mut start_handler(!is_wayland));
-            Ok(())
-        });
-    }
-
+    let eh_thread = spawn_event_handler(config.clone(), is_wayland);
     ipc::create_socket(config);
-
     eh_thread.join().unwrap()?;
     Ok(())
+}
+
+fn spawn_event_handler(config: Arc<RwLock<Config>>, is_wayland: bool) -> JoinHandle<Result<()>> {
+    thread::spawn(move || {
+        log::debug!("Starting event handler in new thread");
+        let mut eh = event_handler::EventHandler::new(config);
+        let mut interface = input::Libinput::new_with_udev(event_handler::Interface);
+        eh.init(&mut interface)?;
+        let _ = eh.main_loop(&mut interface, &mut start_handler(!is_wayland));
+        Ok(())
+    })
 }
 
 #[derive(Parser, Debug)]
