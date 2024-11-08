@@ -21,13 +21,13 @@ use input::{
 use miette::{miette, Result};
 use nix::{
     fcntl::OFlag,
-    poll::{poll, PollFd, PollFlags},
+    poll::{poll, PollFd, PollFlags, PollTimeout},
 };
 
 use crate::config::Config;
 use crate::gestures::{hold::*, pinch::*, swipe::*, *};
-use crate::xdo_handler::XDoHandler;
 use crate::utils::exec_command_from_string;
+use crate::xdo_handler::XDoHandler;
 
 #[derive(Debug)]
 pub struct EventHandler {
@@ -81,8 +81,8 @@ impl EventHandler {
     pub fn main_loop(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) {
         let mut cloned = input.clone();
         let fd = input.as_fd();
-        let fds = PollFd::new(&fd, PollFlags::POLLIN);
-        while poll(&mut [fds], -1).is_ok() {
+        let fds = PollFd::new(fd, PollFlags::POLLIN);
+        while poll(&mut [fds], PollTimeout::NONE).is_ok() {
             self.handle_event(&mut cloned, xdoh)
                 .expect("An Error occurred while handling an event");
         }
