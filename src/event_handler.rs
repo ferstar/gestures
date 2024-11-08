@@ -2,7 +2,7 @@ use std::{
     fs::OpenOptions,
     os::{
         fd::{AsFd, OwnedFd},
-        unix::prelude::{IntoRawFd, OpenOptionsExt},
+        unix::prelude::OpenOptionsExt,
     },
     path::Path,
     sync::{Arc, RwLock},
@@ -64,7 +64,7 @@ impl EventHandler {
             log::error!("Failed to dispatch input events: {}", e);
             return false;
         }
-        
+
         for event in &mut *input {
             if let Event::Device(e) = event {
                 log::debug!("Device: {:?}", &e);
@@ -74,7 +74,7 @@ impl EventHandler {
                 }
             }
         }
-        
+
         log::debug!("No gesture device found");
         false
     }
@@ -355,6 +355,7 @@ impl EventHandler {
 pub struct Interface;
 
 impl LibinputInterface for Interface {
+    #[inline]
     fn open_restricted(&mut self, path: &Path, flags: i32) -> Result<OwnedFd, i32> {
         OpenOptions::new()
             .custom_flags(flags)
@@ -365,9 +366,8 @@ impl LibinputInterface for Interface {
             .map_err(|err| err.raw_os_error().unwrap_or(-1))
     }
 
+    #[inline]
     fn close_restricted(&mut self, fd: OwnedFd) {
-        if let Err(e) = nix::unistd::close(fd.into_raw_fd()) {
-            log::error!("Failed to close file descriptor: {}", e);
-        }
+        drop(fd);
     }
 }
