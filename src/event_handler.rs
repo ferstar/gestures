@@ -97,7 +97,7 @@ impl EventHandler {
 
     pub fn handle_event(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) -> Result<()> {
         input.dispatch().unwrap();
-        for event in input.clone() {
+        for event in input {
             if let Event::Gesture(e) = event {
                 match e {
                     GestureEvent::Pinch(e) => self.handle_pinch_event(e)?,
@@ -106,7 +106,6 @@ impl EventHandler {
                     _ => (),
                 }
             }
-            input.dispatch().unwrap();
         }
         Ok(())
     }
