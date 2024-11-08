@@ -42,28 +42,18 @@ impl SwipeDir {
             return SwipeDir::Any;
         }
 
-        let primary_direction = if x.abs() > y.abs() {
-            if x < 0.0 { SwipeDir::W } else { SwipeDir::E }
-        } else {
-            if y < 0.0 { SwipeDir::N } else { SwipeDir::S }
-        };
+        let angle = y.atan2(x); // Range: -π to π
 
-        let (ratio, secondary_direction) = match primary_direction {
-            SwipeDir::N | SwipeDir::S => (x.abs() / y.abs(), if x < 0.0 { SwipeDir::W } else { SwipeDir::E }),
-            SwipeDir::E | SwipeDir::W => (y.abs() / x.abs(), if y < 0.0 { SwipeDir::N } else { SwipeDir::S }),
-            _ => (0.0, SwipeDir::Any),
-        };
-
-        if ratio > 0.4142 {
-            match (primary_direction, secondary_direction) {
-                (SwipeDir::N, SwipeDir::W) | (SwipeDir::W, SwipeDir::N) => SwipeDir::NW,
-                (SwipeDir::N, SwipeDir::E) | (SwipeDir::E, SwipeDir::N) => SwipeDir::NE,
-                (SwipeDir::S, SwipeDir::W) | (SwipeDir::W, SwipeDir::S) => SwipeDir::SW,
-                (SwipeDir::S, SwipeDir::E) | (SwipeDir::E, SwipeDir::S) => SwipeDir::SE,
-                _ => SwipeDir::Any,
-            }
-        } else {
-            primary_direction
+        match angle {
+            a if a < -2.7489 => SwipeDir::W,  // -π to -7π/8
+            a if a < -1.9635 => SwipeDir::NW, // -7π/8 to -5π/8
+            a if a < -1.1781 => SwipeDir::N,  // -5π/8 to -3π/8
+            a if a < -0.3927 => SwipeDir::NE, // -3π/8 to -π/8
+            a if a < 0.3927 => SwipeDir::E,   // -π/8 to π/8
+            a if a < 1.1781 => SwipeDir::SE,  // π/8 to 3π/8
+            a if a < 1.9635 => SwipeDir::S,   // 3π/8 to 5π/8
+            a if a < 2.7489 => SwipeDir::SW,  // 5π/8 to 7π/8
+            _ => SwipeDir::W,                 // 7π/8 to π
         }
     }
 }
