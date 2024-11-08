@@ -59,23 +59,24 @@ impl EventHandler {
     }
 
     fn has_gesture_device(&mut self, input: &mut Libinput) -> bool {
-        let mut found = false;
         log::debug!("Looking for gesture device");
-        input.dispatch().unwrap();
-        for event in input.clone() {
+        if let Err(e) = input.dispatch() {
+            log::error!("Failed to dispatch input events: {}", e);
+            return false;
+        }
+        
+        for event in &mut *input {
             if let Event::Device(e) = event {
                 log::debug!("Device: {:?}", &e);
-                found = e.device().has_capability(DeviceCapability::Gesture);
-                log::debug!("Supports gestures: {:?}", found);
-                if found {
-                    return found;
+                if e.device().has_capability(DeviceCapability::Gesture) {
+                    log::debug!("Found gesture device");
+                    return true;
                 }
-            } else {
-                continue;
             }
-            input.dispatch().unwrap();
         }
-        found
+        
+        log::debug!("No gesture device found");
+        false
     }
 
     pub fn main_loop(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) -> Result<()> {
