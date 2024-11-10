@@ -29,10 +29,29 @@ use crate::gestures::{hold::*, pinch::*, swipe::*, *};
 use crate::utils::exec_command_from_string;
 use crate::xdo_handler::XDoHandler;
 
+use std::collections::HashMap;
+
+// Add cache struct
+#[derive(Debug)]
+struct GestureCache {
+    swipe_gestures: HashMap<i32, Vec<Gesture>>,
+    last_update: std::time::Instant,
+}
+
+impl GestureCache {
+    fn new() -> Self {
+        Self {
+            swipe_gestures: HashMap::new(),
+            last_update: std::time::Instant::now(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct EventHandler {
     config: Arc<RwLock<Config>>,
     event: Gesture,
+    cache: GestureCache,
 }
 
 impl EventHandler {
@@ -40,6 +59,7 @@ impl EventHandler {
         Self {
             config,
             event: Gesture::None,
+            cache: GestureCache::new(),
         }
     }
 
@@ -249,8 +269,25 @@ impl EventHandler {
         }
     }
 
+    fn update_cache(&mut self) {
+        let config = self.config.read().unwrap();
+        let mut swipe_map: HashMap<i32, Vec<Gesture>> = HashMap::new();
+
+        for gesture in &config.gestures {
+            if let Gesture::Swipe(swipe) = gesture {
+                swipe_map
+                    .entry(swipe.fingers)
+                    .or_default()
+                    .push(gesture.clone());
+            }
+        }
+
+        self.cache.swipe_gestures = swipe_map;
+        self.cache.last_update = std::time::Instant::now();
+    }
+
     fn handle_matching_gesture<F>(
-        &self,
+        &mut self,
         fingers: i32,
         xdoh: &mut XDoHandler,
         handler: F,
@@ -258,12 +295,15 @@ impl EventHandler {
     where
         F: Fn(&Gesture, &mut XDoHandler) -> Result<()>,
     {
+        // Update cache if needed
+        if self.cache.last_update.elapsed() > std::time::Duration::from_secs(1) {
+            self.update_cache();
+        }
+
         if let Gesture::Swipe(_) = &self.event {
-            for gesture in &self.config.read().unwrap().gestures {
-                if let Gesture::Swipe(j) = gesture {
-                    if j.fingers == fingers {
-                        handler(gesture, xdoh)?;
-                    }
+            if let Some(gestures) = self.cache.swipe_gestures.get(&fingers) {
+                for gesture in gestures {
+                    handler(gesture, xdoh)?;
                 }
             }
         }
@@ -299,15 +339,16 @@ impl EventHandler {
 
     fn handle_swipe_update(&mut self, dx: f64, dy: f64, xdoh: &mut XDoHandler) -> Result<()> {
         let swipe_dir = SwipeDir::dir(dx, dy);
-        let fingers = if let Gesture::Swipe(s) = &self.event {
-            s.fingers
+        let (fingers, current_dir) = if let Gesture::Swipe(s) = &self.event {
+            (s.fingers, swipe_dir.clone())
         } else {
             return Ok(());
         };
 
-        log::debug!("{:?} {:?}", &swipe_dir, &fingers);
+        log::debug!("{:?} {:?}", &current_dir, &fingers);
 
-        self.handle_matching_gesture(fingers, xdoh, |gesture, xdoh| {
+        let current_dir = current_dir.clone();
+        self.handle_matching_gesture(fingers, xdoh, move |gesture, xdoh| {
             if let Gesture::Swipe(j) = gesture {
                 if Self::is_xorg_gesture(gesture, xdoh) {
                     let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
@@ -315,7 +356,7 @@ impl EventHandler {
                         (dx * acceleration) as i32,
                         (dy * acceleration) as i32,
                     );
-                } else if j.direction == swipe_dir || j.direction == SwipeDir::Any {
+                } else if j.direction == current_dir || j.direction == SwipeDir::Any {
                     exec_command_from_string(j.update.as_deref().unwrap_or(""), dx, dy, 0.0, 0.0)?;
                 }
             }
@@ -326,27 +367,28 @@ impl EventHandler {
         Ok(())
     }
 
-    fn handle_swipe_end(&self, xdoh: &mut XDoHandler) -> Result<()> {
-        if let Gesture::Swipe(s) = &self.event {
-            self.handle_matching_gesture(s.fingers, xdoh, |gesture, xdoh| {
-                if let Gesture::Swipe(j) = gesture {
-                    if Self::is_xorg_gesture(gesture, xdoh) {
-                        xdoh.mouse_up_delay(1, j.mouse_up_delay.unwrap_or_default());
-                    } else if j.direction == s.direction || j.direction == SwipeDir::Any {
-                        exec_command_from_string(
-                            j.end.as_deref().unwrap_or(""),
-                            0.0,
-                            0.0,
-                            0.0,
-                            0.0,
-                        )?;
-                    }
-                }
-                Ok(())
-            })
+    fn handle_swipe_end(&mut self, xdoh: &mut XDoHandler) -> Result<()> {
+        let (fingers, direction) = if let Gesture::Swipe(s) = &self.event {
+            (s.fingers, s.direction.clone())
         } else {
+            return Ok(());
+        };
+        self.handle_matching_gesture(fingers, xdoh, |gesture, xdoh| {
+            if let Gesture::Swipe(j) = gesture {
+                if Self::is_xorg_gesture(gesture, xdoh) {
+                    xdoh.mouse_up_delay(1, j.mouse_up_delay.unwrap_or_default());
+                } else if j.direction == direction || j.direction == SwipeDir::Any {
+                    exec_command_from_string(
+                        j.end.as_deref().unwrap_or(""),
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                    )?;
+                }
+            }
             Ok(())
-        }
+        })
     }
 }
 
