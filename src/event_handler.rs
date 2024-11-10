@@ -236,119 +236,144 @@ impl EventHandler {
         xdoh: &mut XDoHandler,
     ) -> Result<()> {
         match event {
-            GestureSwipeEvent::Begin(e) => {
-                self.event = Gesture::Swipe(Swipe {
-                    direction: SwipeDir::Any,
-                    fingers: e.finger_count(),
-                    update: None,
-                    start: None,
-                    end: None,
-                    acceleration: None,
-                    mouse_up_delay: None,
-                });
-                if let Gesture::Swipe(s) = &self.event {
-                    for gesture in &self.config.clone().read().unwrap().gestures {
-                        if let Gesture::Swipe(j) = gesture {
-                            if j.fingers == s.fingers {
-                                let is_xorg_condition = xdoh.is_xorg
-                                    && j.acceleration.is_some()
-                                    && j.mouse_up_delay.is_some()
-                                    && j.direction == SwipeDir::Any;
-                                if is_xorg_condition {
-                                    log::debug!("Call libxdo api directly in Xorg env for better performance.");
-                                    xdoh.mouse_down(1);
-                                } else if j.direction == s.direction || j.direction == SwipeDir::Any
-                                {
-                                    exec_command_from_string(
-                                        &j.start.as_ref().unwrap_or(&String::new()),
-                                        0.0,
-                                        0.0,
-                                        0.0,
-                                        0.0,
-                                    )?;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            GestureSwipeEvent::Update(e) => {
-                let (x, y) = (e.dx(), e.dy());
-                let swipe_dir = SwipeDir::dir(x, y);
-
-                if let Gesture::Swipe(s) = &self.event {
-                    log::debug!("{:?}  {:?}", &swipe_dir, &s.fingers);
-                    for gesture in &self.config.clone().read().unwrap().gestures {
-                        if let Gesture::Swipe(j) = gesture {
-                            if j.fingers == s.fingers {
-                                let is_xorg_condition = xdoh.is_xorg
-                                    && j.acceleration.is_some()
-                                    && j.mouse_up_delay.is_some()
-                                    && j.direction == SwipeDir::Any;
-                                if is_xorg_condition {
-                                    let x_val =
-                                        x * j.acceleration.unwrap_or_default() as f64 / 10.0;
-                                    let y_val =
-                                        y * j.acceleration.unwrap_or_default() as f64 / 10.0;
-                                    xdoh.move_mouse_relative(x_val as i32, y_val as i32);
-                                } else if j.direction == swipe_dir || j.direction == SwipeDir::Any {
-                                    exec_command_from_string(
-                                        &j.update.as_ref().unwrap_or(&String::new()),
-                                        x,
-                                        y,
-                                        0.0,
-                                        0.0,
-                                    )?;
-                                }
-                            }
-                        }
-                    }
-                    self.event = Gesture::Swipe(Swipe {
-                        direction: swipe_dir,
-                        fingers: s.fingers,
-                        update: None,
-                        start: None,
-                        end: None,
-                        acceleration: None,
-                        mouse_up_delay: None,
-                    })
-                }
-            }
+            GestureSwipeEvent::Begin(e) => self.handle_swipe_begin(e.finger_count(), xdoh),
+            GestureSwipeEvent::Update(e) => self.handle_swipe_update(e.dx(), e.dy(), xdoh),
             GestureSwipeEvent::End(e) => {
-                if let Gesture::Swipe(s) = &self.event {
-                    if !e.cancelled() {
-                        for gesture in &self.config.clone().read().unwrap().gestures {
-                            if let Gesture::Swipe(j) = gesture {
-                                if j.fingers == s.fingers {
-                                    let is_xorg_condition = xdoh.is_xorg
-                                        && j.acceleration.is_some()
-                                        && j.mouse_up_delay.is_some()
-                                        && j.direction == SwipeDir::Any;
-                                    if is_xorg_condition {
-                                        xdoh.mouse_up_delay(
-                                            1,
-                                            j.mouse_up_delay.clone().unwrap_or_default(),
-                                        );
-                                    } else if j.direction == s.direction
-                                        || j.direction == SwipeDir::Any
-                                    {
-                                        exec_command_from_string(
-                                            &j.end.as_ref().unwrap_or(&String::new()),
-                                            0.0,
-                                            0.0,
-                                            0.0,
-                                            0.0,
-                                        )?;
-                                    }
-                                }
-                            }
-                        }
+                if !e.cancelled() {
+                    self.handle_swipe_end(xdoh)
+                } else {
+                    Ok(())
+                }
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn handle_matching_gesture<F>(
+        &self,
+        fingers: i32,
+        xdoh: &mut XDoHandler,
+        handler: F,
+    ) -> Result<()>
+    where
+        F: Fn(&Gesture, &mut XDoHandler) -> Result<()>,
+    {
+        if let Gesture::Swipe(_) = &self.event {
+            for gesture in &self.config.read().unwrap().gestures {
+                if let Gesture::Swipe(j) = gesture {
+                    if j.fingers == fingers {
+                        handler(gesture, xdoh)?;
                     }
                 }
             }
-            _ => (),
         }
         Ok(())
+    }
+
+    fn is_xorg_gesture(gesture: &Gesture, xdoh: &XDoHandler) -> bool {
+        if let Gesture::Swipe(j) = gesture {
+            xdoh.is_xorg
+                && j.acceleration.is_some()
+                && j.mouse_up_delay.is_some()
+                && j.direction == SwipeDir::Any
+        } else {
+            false
+        }
+    }
+
+    fn handle_swipe_begin(&mut self, fingers: i32, xdoh: &mut XDoHandler) -> Result<()> {
+        self.event = Gesture::Swipe(Swipe::new(fingers));
+
+        self.handle_matching_gesture(fingers, xdoh, |gesture, xdoh| {
+            if Self::is_xorg_gesture(gesture, xdoh) {
+                log::debug!("Call libxdo api directly in Xorg env for better performance.");
+                xdoh.mouse_down(1);
+            } else if let Gesture::Swipe(j) = gesture {
+                if j.direction == SwipeDir::Any {
+                    exec_command_from_string(j.start.as_deref().unwrap_or(""), 0.0, 0.0, 0.0, 0.0)?;
+                }
+            }
+            Ok(())
+        })
+    }
+
+    fn handle_swipe_update(&mut self, dx: f64, dy: f64, xdoh: &mut XDoHandler) -> Result<()> {
+        let swipe_dir = SwipeDir::dir(dx, dy);
+        let fingers = if let Gesture::Swipe(s) = &self.event {
+            s.fingers
+        } else {
+            return Ok(());
+        };
+
+        log::debug!("{:?} {:?}", &swipe_dir, &fingers);
+
+        self.handle_matching_gesture(fingers, xdoh, |gesture, xdoh| {
+            if let Gesture::Swipe(j) = gesture {
+                if Self::is_xorg_gesture(gesture, xdoh) {
+                    let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
+                    xdoh.move_mouse_relative(
+                        (dx * acceleration) as i32,
+                        (dy * acceleration) as i32,
+                    );
+                } else if j.direction == swipe_dir || j.direction == SwipeDir::Any {
+                    exec_command_from_string(j.update.as_deref().unwrap_or(""), dx, dy, 0.0, 0.0)?;
+                }
+            }
+            Ok(())
+        })?;
+
+        self.event = Gesture::Swipe(Swipe::with_direction(fingers, swipe_dir));
+        Ok(())
+    }
+
+    fn handle_swipe_end(&self, xdoh: &mut XDoHandler) -> Result<()> {
+        if let Gesture::Swipe(s) = &self.event {
+            self.handle_matching_gesture(s.fingers, xdoh, |gesture, xdoh| {
+                if let Gesture::Swipe(j) = gesture {
+                    if Self::is_xorg_gesture(gesture, xdoh) {
+                        xdoh.mouse_up_delay(1, j.mouse_up_delay.unwrap_or_default());
+                    } else if j.direction == s.direction || j.direction == SwipeDir::Any {
+                        exec_command_from_string(
+                            j.end.as_deref().unwrap_or(""),
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                        )?;
+                    }
+                }
+                Ok(())
+            })
+        } else {
+            Ok(())
+        }
+    }
+}
+
+// Add this helper impl
+impl Swipe {
+    fn new(fingers: i32) -> Self {
+        Self {
+            direction: SwipeDir::Any,
+            fingers,
+            update: None,
+            start: None,
+            end: None,
+            acceleration: None,
+            mouse_up_delay: None,
+        }
+    }
+
+    fn with_direction(fingers: i32, direction: SwipeDir) -> Self {
+        Self {
+            direction,
+            fingers,
+            update: None,
+            start: None,
+            end: None,
+            acceleration: None,
+            mouse_up_delay: None,
+        }
     }
 }
 
