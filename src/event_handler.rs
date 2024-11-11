@@ -5,7 +5,7 @@ use std::{
         unix::prelude::OpenOptionsExt,
     },
     path::Path,
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 use input::{
@@ -30,6 +30,7 @@ use crate::utils::exec_command_from_string;
 use crate::xdo_handler::XDoHandler;
 
 use std::collections::HashMap;
+use parking_lot::RwLock;
 
 // Add cache struct
 #[derive(Debug)]
@@ -49,7 +50,7 @@ impl GestureCache {
 
 #[derive(Debug)]
 pub struct EventHandler {
-    config: Arc<RwLock<Config>>,
+    config: Arc<RwLock<Config>>, // Changed from std::sync::RwLock
     event: Gesture,
     cache: GestureCache,
 }
@@ -142,7 +143,7 @@ impl EventHandler {
             GestureHoldEvent::End(_e) => {
                 if let Gesture::Hold(s) = &self.event {
                     log::debug!("Hold: {:?}", &s.fingers);
-                    for i in &self.config.clone().read().unwrap().gestures {
+                    for i in &self.config.clone().read().gestures {
                         if let Gesture::Hold(j) = i {
                             if j.fingers == s.fingers {
                                 exec_command_from_string(
@@ -173,7 +174,7 @@ impl EventHandler {
                     end: None,
                 });
                 if let Gesture::Pinch(s) = &self.event {
-                    for i in &self.config.clone().read().unwrap().gestures {
+                    for i in &self.config.clone().read().gestures {
                         if let Gesture::Pinch(j) = i {
                             if (j.direction == s.direction || j.direction == PinchDir::Any)
                                 && j.fingers == s.fingers
@@ -202,7 +203,7 @@ impl EventHandler {
                         &dir,
                         &s.fingers
                     );
-                    for i in &self.config.clone().read().unwrap().gestures {
+                    for i in &self.config.clone().read().gestures {
                         if let Gesture::Pinch(j) = i {
                             if (j.direction == dir || j.direction == PinchDir::Any)
                                 && j.fingers == s.fingers
@@ -228,7 +229,7 @@ impl EventHandler {
             }
             GesturePinchEvent::End(_e) => {
                 if let Gesture::Pinch(s) = &self.event {
-                    for i in &self.config.clone().read().unwrap().gestures {
+                    for i in &self.config.clone().read().gestures {
                         if let Gesture::Pinch(j) = i {
                             if (j.direction == s.direction || j.direction == PinchDir::Any)
                                 && j.fingers == s.fingers
@@ -270,7 +271,7 @@ impl EventHandler {
     }
 
     fn update_cache(&mut self) {
-        let config = self.config.read().unwrap();
+        let config = self.config.read(); // No need for unwrap()
         let mut swipe_map: HashMap<i32, Vec<Gesture>> = HashMap::new();
 
         for gesture in &config.gestures {

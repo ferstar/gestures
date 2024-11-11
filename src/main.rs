@@ -9,9 +9,10 @@ mod xdo_handler;
 #[cfg(test)]
 mod tests;
 
+use parking_lot::RwLock;
 use std::{
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 

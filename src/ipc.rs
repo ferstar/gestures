@@ -1,7 +1,8 @@
+use parking_lot::RwLock;
 use std::env;
 use std::io::{BufRead, BufReader};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::thread;
 
 use crate::config::Config;
@@ -53,7 +54,7 @@ fn handle_connection(stream: UnixStream, config: Arc<RwLock<Config>>) {
 
     for line in stream.lines() {
         if line.unwrap().contains("reload") {
-            let mut c = config.write().unwrap();
+            let mut c = config.write();
             *c = Config::read_default_config().unwrap_or_else(|_| {
                 log::error!("Could not read configuration file, using empty config!");
                 Config::default()
