@@ -8,14 +8,14 @@
       flake = false;
     };
     utils.url = "github:numtide/flake-utils";
-    rust-overlay.url = "github:oxalica/rust-overlay";
+    fenix.url = "github:nix-community/fenix";
     crate2nix = {
       url = "github:kolloch/crate2nix";
       flake = false;
     };
   };
 
-  outputs = { self, nixpkgs, utils, rust-overlay, crate2nix, ... }:
+  outputs = { nixpkgs, utils, fenix, crate2nix, ... }:
   let 
     name = "gestures";
   in utils.lib.eachSystem
@@ -24,38 +24,35 @@
     ]
     (system:
       let
+        toolchain = fenix.packages.${system}.fromToolchainFile {
+          file = ./rust-toolchain.toml;
+          sha256 = "sha256-s1RPtyvDGJaX/BisLT+ifVfuhDT1nZkZ1NcK8sbwELM=";
+        };
+
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [
-            rust-overlay.overlay
-            (self: super: {
-              rustc = self.rust-bin.stable.latest.default;
-              cargo = self.rust-bin.stable.latest.default;
-            })
-          ];
         };
-        inherit (import "${crate2nix}/tools.nix" { inherit pkgs; })
-          generatedCargoNix;   
 
-        project = pkgs.callPackage
-          (generatedCargoNix {
-            inherit name;
-            src = ./.;
-          })
-          {
-            defaultCrateOverrides = pkgs.defaultCrateOverrides // {
-              ${name} = oldAttrs: {
-                inherit buildInputs nativeBuildInputs;
-              } // buildEnvVars;
-            };
-          };
+        crate2nix' = pkgs.callPackage "${crate2nix}/tools.nix" { };
+        project = crate2nix'.appliedCargoNix {
+          inherit name;
+          src = ./.;
 
-        buildInputs = with pkgs; [ libinput udev ];
-        nativeBuildInputs = with pkgs; [ rustc cargo pkgconfig nixpkgs-fmt ];
+          #inherit buildInputs nativeBuildInputs;
+        };
+
+        buildInputs = with pkgs; [ libinput udev xdotool ];
+        nativeBuildInputs = with pkgs; [ toolchain pkg-config nixpkgs-fmt ];
         buildEnvVars = {};
       in
       rec {
-        packages.${name} = project.rootCrate.build;
+        packages.${name} = project.rootCrate.build.override {
+          crateOverrides = pkgs.defaultCrateOverrides // {
+            ${name} = attrs: {
+              inherit buildInputs nativeBuildInputs;
+            };
+          };
+        };
 
         defaultPackage = packages.${name};
 

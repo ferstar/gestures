@@ -14,7 +14,7 @@ nix = {version = "0.29.0", features = ["poll", "fs"]}
 anyhow = "1.0.93"
 regex = "1.11.1"
 log = "0.4.22"
-env_logger = "0.11.5"
+env_logger = { version = "0.11.5", features = ["auto-color"] }
 miette = { version = "7.2.0", features = ["fancy"] }
 knuffel = "3.2.0"
 libxdo = "0.6.0"
