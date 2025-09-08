@@ -28,7 +28,7 @@ swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
 
 // The below config may be working on wayland, but I haven't tested it.
 // You need to install ydotool to use it.
-// swipe direction="any" fingers=3 action="ydotool mousemove_relative -- $delta_x $delta_y" start="ydotool click -- 0x40" end="ydotool click -- 0x80"
+// swipe direction="any" fingers=3 update="ydotool mousemove  -x $delta_x -y $delta_y" start="ydotool click -- 0x40" end="ydotool click -- 0x80"
 
 swipe direction="w" fingers=4 end="xdotool key alt+Right"
 swipe direction="e" fingers=4 end="xdotool key alt+Left"
