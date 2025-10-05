@@ -4,6 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use crate::config::Config;
 
@@ -20,29 +21,51 @@ impl Drop for IpcListener {
 pub fn create_socket(config: Arc<RwLock<Config>>) {
     let socket_dir = env::var("XDG_RUNTIME_DIR").unwrap_or("/tmp".to_string());
     let socket_path = format!("{}/gestures.sock", socket_dir);
+
     if std::path::Path::new(&socket_path).exists() {
         std::fs::remove_file(&socket_path).expect("Could not remove existing socket file");
     }
+
     let listener = UnixListener::bind(&socket_path).unwrap();
 
-    {
-        // let listener = listener.clone();
-        ctrlc::set_handler(move || {
-            std::fs::remove_file(&socket_path).unwrap();
-            std::process::exit(1);
-        })
-        .unwrap();
-    }
+    // Set non-blocking mode
+    listener
+        .set_nonblocking(true)
+        .expect("Cannot set non-blocking");
 
-    // for stream in listener.read().unwrap().0.incoming() {
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
+    // Cleanup socket on shutdown
+    let socket_path_clone = socket_path.clone();
+    let cleanup = move || {
+        let _ = std::fs::remove_file(&socket_path_clone);
+    };
+
+    // Register cleanup handler
+    let socket_path_for_handler = socket_path.clone();
+    ctrlc::set_handler(move || {
+        let _ = std::fs::remove_file(&socket_path_for_handler);
+        std::process::exit(0);
+    })
+    .unwrap();
+
+    loop {
+        // Check shutdown flag
+        if crate::SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
+            log::info!("IPC listener shutting down");
+            cleanup();
+            break;
+        }
+
+        match listener.accept() {
+            Ok((stream, _)) => {
                 let config = config.clone();
                 thread::spawn(|| handle_connection(stream, config));
             }
-            Err(err) => {
-                eprintln!("Got error while handling IPC connection: {err}");
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                // No incoming connection, sleep briefly and check again
+                thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => {
+                eprintln!("Got error while handling IPC connection: {e}");
                 break;
             }
         }

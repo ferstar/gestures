@@ -12,7 +12,10 @@ mod tests;
 use parking_lot::RwLock;
 use std::{
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        atomic::AtomicBool,
+        Arc, LazyLock,
+    },
     thread::{self, JoinHandle},
 };
 
@@ -24,8 +27,16 @@ use miette::Result;
 use crate::config::*;
 use crate::xdo_handler::start_handler;
 
+pub static SHUTDOWN: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| Arc::new(AtomicBool::new(false)));
+
 fn main() -> Result<()> {
     let app = App::parse();
+
+    // Setup signal handlers for graceful shutdown
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, SHUTDOWN.clone())
+        .expect("Failed to register SIGTERM handler");
+    signal_hook::flag::register(signal_hook::consts::SIGINT, SHUTDOWN.clone())
+        .expect("Failed to register SIGINT handler");
 
     {
         let mut l = Builder::from_default_env();
