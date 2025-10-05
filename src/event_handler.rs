@@ -347,10 +347,9 @@ impl EventHandler {
         Ok(())
     }
 
-    fn is_xorg_gesture(gesture: &Gesture, xdoh: &XDoHandler) -> bool {
+    fn is_direct_mouse_gesture(gesture: &Gesture) -> bool {
         if let Gesture::Swipe(j) = gesture {
-            xdoh.is_xorg
-                && j.acceleration.is_some()
+            j.acceleration.is_some()
                 && j.mouse_up_delay.is_some()
                 && j.direction == SwipeDir::Any
         } else {
@@ -362,8 +361,8 @@ impl EventHandler {
         self.event = Gesture::Swipe(Swipe::new(fingers));
 
         self.handle_matching_gesture(fingers, xdoh, |gesture, xdoh| {
-            if Self::is_xorg_gesture(gesture, xdoh) {
-                log::debug!("Call libxdo api directly in Xorg env for better performance.");
+            if Self::is_direct_mouse_gesture(gesture) {
+                log::debug!("Using direct mouse control (X11: libxdo, Wayland: ydotool)");
                 xdoh.mouse_down(1);
             } else if let Gesture::Swipe(j) = gesture {
                 if j.direction == SwipeDir::Any {
@@ -390,7 +389,7 @@ impl EventHandler {
         let current_dir = current_dir.clone();
         self.handle_matching_gesture(fingers, xdoh, move |gesture, xdoh| {
             if let Gesture::Swipe(j) = gesture {
-                if Self::is_xorg_gesture(gesture, xdoh) {
+                if Self::is_direct_mouse_gesture(gesture) {
                     let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
                     xdoh.move_mouse_relative(
                         (dx * acceleration) as i32,
@@ -416,8 +415,9 @@ impl EventHandler {
         };
         self.handle_matching_gesture(fingers, xdoh, |gesture, xdoh| {
             if let Gesture::Swipe(j) = gesture {
-                if Self::is_xorg_gesture(gesture, xdoh) {
-                    xdoh.mouse_up_delay(1, j.mouse_up_delay.unwrap_or_default());
+                if Self::is_direct_mouse_gesture(gesture) {
+                    let delay = j.mouse_up_delay.unwrap_or_default();
+                    xdoh.mouse_up_delay(1, delay);
                 } else if j.direction == direction || j.direction == SwipeDir::Any {
                     exec_command_from_string(
                         j.end.as_deref().unwrap_or(""),

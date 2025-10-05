@@ -1,10 +1,10 @@
 use chrono::Duration;
 use libxdo::XDo;
+use std::process::Command;
 use std::sync::mpsc;
 use std::thread;
 use timer::Timer;
 
-// 1. 使用 #[derive(Copy, Clone)] 对简单枚举优化
 #[derive(Copy, Clone)]
 pub enum XDoCommand {
     MouseUp,
@@ -13,25 +13,19 @@ pub enum XDoCommand {
 }
 
 pub struct XDoHandler {
-    tx: mpsc::Sender<(XDoCommand, i32, i32)>,
+    tx: Option<mpsc::Sender<(XDoCommand, i32, i32)>>,
     timer: Timer,
     guard: Option<timer::Guard>,
     handler_mouse_down: bool,
-    pub is_xorg: bool,
 }
 
 pub fn start_handler(is_xorg: bool) -> XDoHandler {
-    let (tx, rx) = mpsc::channel();
-    let timer = Timer::new();
-    
-    if is_xorg {
+    let tx = if is_xorg {
+        let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
-            // 2. 将 XDo 实例移到线程外部以避免重复创建
             let xdo = XDo::new(None).expect("can not initialize libxdo");
-            
-            // 3. 使用 while let 替代 loop + match 模式，更符合 Rust 习惯
+
             while let Ok((command, param1, param2)) = rx.recv() {
-                // 4. 使用 let _ = 处理 Result，避免 unwrap
                 let _ = match command {
                     XDoCommand::MouseDown => xdo.mouse_down(param1),
                     XDoCommand::MouseUp => xdo.mouse_up(param1),
@@ -39,39 +33,67 @@ pub fn start_handler(is_xorg: bool) -> XDoHandler {
                 };
             }
         });
-    }
+        Some(tx)
+    } else {
+        None
+    };
 
     XDoHandler {
         tx,
-        timer,
+        timer: Timer::new(),
         guard: None,
         handler_mouse_down: false,
-        is_xorg,
     }
 }
 
 impl XDoHandler {
-    // 5. 使用 '&mut self' 而不是移动所有权
     pub fn mouse_down(&mut self, button: i32) {
         self.cancel_timer_if_present();
-        let _ = self.tx.send((XDoCommand::MouseDown, button, 255));
+        if let Some(ref tx) = self.tx {
+            let _ = tx.send((XDoCommand::MouseDown, button, 255));
+        } else {
+            // Wayland: use ydotool
+            let _ = Command::new("ydotool")
+                .args(&["click", "--", "0x40"])
+                .spawn();
+        }
         self.handler_mouse_down = true;
     }
 
     pub fn mouse_up_delay(&mut self, button: i32, delay_ms: i64) {
-        let tx_clone = self.tx.clone();
-        self.guard = Some(self.timer.schedule_with_delay(
-            Duration::milliseconds(delay_ms),
-            move || {
-                let _ = tx_clone.send((XDoCommand::MouseUp, button, 255));
-            },
-        ));
+        if let Some(ref tx) = self.tx {
+            // X11: send via channel
+            let tx_clone = tx.clone();
+            self.guard = Some(self.timer.schedule_with_delay(
+                Duration::milliseconds(delay_ms),
+                move || {
+                    let _ = tx_clone.send((XDoCommand::MouseUp, button, 255));
+                },
+            ));
+        } else {
+            // Wayland: schedule ydotool command
+            self.guard = Some(self.timer.schedule_with_delay(
+                Duration::milliseconds(delay_ms),
+                move || {
+                    let _ = Command::new("ydotool")
+                        .args(&["click", "--", "0x80"])
+                        .spawn();
+                },
+            ));
+        }
         self.handler_mouse_down = false;
     }
 
     pub fn move_mouse_relative(&mut self, x_val: i32, y_val: i32) {
         self.cancel_timer_if_present();
-        let _ = self.tx.send((XDoCommand::MoveMouseRelative, x_val, y_val));
+        if let Some(ref tx) = self.tx {
+            let _ = tx.send((XDoCommand::MoveMouseRelative, x_val, y_val));
+        } else {
+            // Wayland: use ydotool
+            let _ = Command::new("ydotool")
+                .args(&["mousemove", "-x", &x_val.to_string(), "-y", &y_val.to_string()])
+                .spawn();
+        }
     }
 
     fn cancel_timer_if_present(&mut self) {

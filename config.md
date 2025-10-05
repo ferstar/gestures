@@ -22,11 +22,12 @@ The configuration format (since 0.5.0) uses [`kdl`](https://kdl.dev).
 // For example, this will make a 3-finger-drag in any direction move the mouse(like the macOS 3-finger-drag)
 // Your fingers can temporarily leave the touchpad for up to 500ms before the drag is cancelled.
 // The acceleration is set to 20, which means that the mouse will move 20/10=2 times faster than your current mouse speed.
-// NOTE: This 3-finger-drag config only works on x11,
-// and it only works if you have xdotool installed.
+// NOTE: This config works on both X11 and Wayland.
+// On X11, it uses xdotool api directly for better performance.
+// On Wayland, it uses ydotool (you need to install ydotool and run ydotoold daemon).
 swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
 
-// The below config may be working on wayland, but I haven't tested it.
+// The below config is for manual control on Wayland if you don't want to use the simplified config above.
 // You need to install ydotool to use it.
 // swipe direction="any" fingers=3 update="ydotool mousemove  -x $delta_x -y $delta_y" start="ydotool click -- 0x40" end="ydotool click -- 0x80"
 
