@@ -4,7 +4,7 @@ mod gestures;
 mod ipc;
 mod ipc_client;
 mod utils;
-mod xdo_handler;
+mod mouse_handler;
 
 #[cfg(test)]
 mod tests;
@@ -25,7 +25,7 @@ use log::LevelFilter;
 use miette::Result;
 
 use crate::config::*;
-use crate::xdo_handler::start_handler;
+use crate::mouse_handler::start_handler;
 
 pub static SHUTDOWN: LazyLock<Arc<AtomicBool>> = LazyLock::new(|| Arc::new(AtomicBool::new(false)));
 

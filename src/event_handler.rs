@@ -27,12 +27,11 @@ use nix::{
 use crate::config::Config;
 use crate::gestures::{hold::*, pinch::*, swipe::*, *};
 use crate::utils::exec_command_from_string;
-use crate::xdo_handler::XDoHandler;
+use crate::mouse_handler::MouseHandler;
 
 use std::collections::HashMap;
 use parking_lot::RwLock;
 
-// Add cache struct
 #[derive(Debug)]
 struct GestureCache {
     swipe_gestures: HashMap<i32, Vec<Gesture>>,
@@ -48,7 +47,6 @@ impl GestureCache {
     }
 }
 
-// Throttle state for wayland swipe updates
 #[derive(Debug)]
 struct ThrottleState {
     last_update: std::time::Instant,
@@ -76,7 +74,7 @@ impl ThrottleState {
 
 #[derive(Debug)]
 pub struct EventHandler {
-    config: Arc<RwLock<Config>>, // Changed from std::sync::RwLock
+    config: Arc<RwLock<Config>>,
     event: Gesture,
     cache: GestureCache,
     throttle: ThrottleState,
@@ -88,7 +86,7 @@ impl EventHandler {
             config,
             event: Gesture::None,
             cache: GestureCache::new(),
-            throttle: ThrottleState::new(60), // 60 FPS (~16ms) considering ydotool ~100ms latency
+            throttle: ThrottleState::new(60),
         }
     }
 
@@ -128,22 +126,19 @@ impl EventHandler {
         false
     }
 
-    pub fn main_loop(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) -> Result<()> {
+    pub fn main_loop(&mut self, input: &mut Libinput, mh: &mut MouseHandler) -> Result<()> {
         loop {
-            // Check shutdown flag
             if crate::SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
                 log::info!("Received shutdown signal, exiting event loop");
                 break;
             }
 
             let mut fds = [PollFd::new(input.as_fd(), PollFlags::POLLIN)];
-            // Use timeout instead of NONE to allow checking shutdown flag
             match poll(&mut fds, PollTimeout::try_from(100).unwrap()) {
                 Ok(_) => {
-                    self.handle_event(input, xdoh)?;
+                    self.handle_event(input, mh)?;
                 }
                 Err(e) => {
-                    // Only break if it's not an interrupt
                     if e != nix::errno::Errno::EINTR {
                         return Err(miette!("Poll error: {}", e));
                     }
@@ -153,13 +148,13 @@ impl EventHandler {
         Ok(())
     }
 
-    pub fn handle_event(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) -> Result<()> {
+    pub fn handle_event(&mut self, input: &mut Libinput, mh: &mut MouseHandler) -> Result<()> {
         input.dispatch().unwrap();
         for event in input {
             if let Event::Gesture(e) = event {
                 match e {
                     GestureEvent::Pinch(e) => self.handle_pinch_event(e)?,
-                    GestureEvent::Swipe(e) => self.handle_swipe_event(e, xdoh)?,
+                    GestureEvent::Swipe(e) => self.handle_swipe_event(e, mh)?,
                     GestureEvent::Hold(e) => self.handle_hold_event(e)?,
                     _ => (),
                 }
@@ -290,14 +285,14 @@ impl EventHandler {
     fn handle_swipe_event(
         &mut self,
         event: GestureSwipeEvent,
-        xdoh: &mut XDoHandler,
+        mh: &mut MouseHandler,
     ) -> Result<()> {
         match event {
-            GestureSwipeEvent::Begin(e) => self.handle_swipe_begin(e.finger_count(), xdoh),
-            GestureSwipeEvent::Update(e) => self.handle_swipe_update(e.dx(), e.dy(), xdoh),
+            GestureSwipeEvent::Begin(e) => self.handle_swipe_begin(e.finger_count(), mh),
+            GestureSwipeEvent::Update(e) => self.handle_swipe_update(e.dx(), e.dy(), mh),
             GestureSwipeEvent::End(e) => {
                 if !e.cancelled() {
-                    self.handle_swipe_end(xdoh)
+                    self.handle_swipe_end(mh)
                 } else {
                     Ok(())
                 }
@@ -307,7 +302,7 @@ impl EventHandler {
     }
 
     fn update_cache(&mut self) {
-        let config = self.config.read(); // No need for unwrap()
+        let config = self.config.read();
         let mut swipe_map: HashMap<i32, Vec<Gesture>> = HashMap::new();
 
         for gesture in &config.gestures {
@@ -326,13 +321,12 @@ impl EventHandler {
     fn handle_matching_gesture<F>(
         &mut self,
         fingers: i32,
-        xdoh: &mut XDoHandler,
+        mh: &mut MouseHandler,
         handler: F,
     ) -> Result<()>
     where
-        F: Fn(&Gesture, &mut XDoHandler) -> Result<()>,
+        F: Fn(&Gesture, &mut MouseHandler) -> Result<()>,
     {
-        // Update cache if needed
         if self.cache.last_update.elapsed() > std::time::Duration::from_secs(1) {
             self.update_cache();
         }
@@ -340,7 +334,7 @@ impl EventHandler {
         if let Gesture::Swipe(_) = &self.event {
             if let Some(gestures) = self.cache.swipe_gestures.get(&fingers) {
                 for gesture in gestures {
-                    handler(gesture, xdoh)?;
+                    handler(gesture, mh)?;
                 }
             }
         }
@@ -357,13 +351,13 @@ impl EventHandler {
         }
     }
 
-    fn handle_swipe_begin(&mut self, fingers: i32, xdoh: &mut XDoHandler) -> Result<()> {
+    fn handle_swipe_begin(&mut self, fingers: i32, mh: &mut MouseHandler) -> Result<()> {
         self.event = Gesture::Swipe(Swipe::new(fingers));
 
-        self.handle_matching_gesture(fingers, xdoh, |gesture, xdoh| {
+        self.handle_matching_gesture(fingers, mh, |gesture, mh| {
             if Self::is_direct_mouse_gesture(gesture) {
-                log::debug!("Using direct mouse control (X11: libxdo, Wayland: ydotool)");
-                xdoh.mouse_down(1);
+                log::debug!("Using direct mouse control");
+                mh.mouse_down(1);
             } else if let Gesture::Swipe(j) = gesture {
                 if j.direction == SwipeDir::Any {
                     exec_command_from_string(j.start.as_deref().unwrap_or(""), 0.0, 0.0, 0.0, 0.0)?;
@@ -373,7 +367,7 @@ impl EventHandler {
         })
     }
 
-    fn handle_swipe_update(&mut self, dx: f64, dy: f64, xdoh: &mut XDoHandler) -> Result<()> {
+    fn handle_swipe_update(&mut self, dx: f64, dy: f64, mh: &mut MouseHandler) -> Result<()> {
         let swipe_dir = SwipeDir::dir(dx, dy);
         let (fingers, current_dir) = if let Gesture::Swipe(s) = &self.event {
             (s.fingers, swipe_dir.clone())
@@ -383,20 +377,18 @@ impl EventHandler {
 
         log::debug!("{:?} {:?}", &current_dir, &fingers);
 
-        // Check throttle before processing
         let should_throttle_update = !self.throttle.should_update();
 
         let current_dir = current_dir.clone();
-        self.handle_matching_gesture(fingers, xdoh, move |gesture, xdoh| {
+        self.handle_matching_gesture(fingers, mh, move |gesture, mh| {
             if let Gesture::Swipe(j) = gesture {
                 if Self::is_direct_mouse_gesture(gesture) {
                     let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
-                    xdoh.move_mouse_relative(
+                    mh.move_mouse_relative(
                         (dx * acceleration) as i32,
                         (dy * acceleration) as i32,
                     );
                 } else if (j.direction == current_dir || j.direction == SwipeDir::Any) && !should_throttle_update {
-                    // Throttle wayland command execution
                     exec_command_from_string(j.update.as_deref().unwrap_or(""), dx, dy, 0.0, 0.0)?;
                 }
             }
@@ -407,17 +399,17 @@ impl EventHandler {
         Ok(())
     }
 
-    fn handle_swipe_end(&mut self, xdoh: &mut XDoHandler) -> Result<()> {
+    fn handle_swipe_end(&mut self, mh: &mut MouseHandler) -> Result<()> {
         let (fingers, direction) = if let Gesture::Swipe(s) = &self.event {
             (s.fingers, s.direction.clone())
         } else {
             return Ok(());
         };
-        self.handle_matching_gesture(fingers, xdoh, |gesture, xdoh| {
+        self.handle_matching_gesture(fingers, mh, |gesture, mh| {
             if let Gesture::Swipe(j) = gesture {
                 if Self::is_direct_mouse_gesture(gesture) {
                     let delay = j.mouse_up_delay.unwrap_or_default();
-                    xdoh.mouse_up_delay(1, delay);
+                    mh.mouse_up_delay(1, delay);
                 } else if j.direction == direction || j.direction == SwipeDir::Any {
                     exec_command_from_string(
                         j.end.as_deref().unwrap_or(""),
