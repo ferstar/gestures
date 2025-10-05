@@ -48,11 +48,38 @@ impl GestureCache {
     }
 }
 
+// Throttle state for wayland swipe updates
+#[derive(Debug)]
+struct ThrottleState {
+    last_update: std::time::Instant,
+    min_interval: std::time::Duration,
+}
+
+impl ThrottleState {
+    fn new(fps: u32) -> Self {
+        Self {
+            last_update: std::time::Instant::now(),
+            min_interval: std::time::Duration::from_micros(1_000_000 / fps as u64),
+        }
+    }
+
+    fn should_update(&mut self) -> bool {
+        let now = std::time::Instant::now();
+        if now.duration_since(self.last_update) >= self.min_interval {
+            self.last_update = now;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct EventHandler {
     config: Arc<RwLock<Config>>, // Changed from std::sync::RwLock
     event: Gesture,
     cache: GestureCache,
+    throttle: ThrottleState,
 }
 
 impl EventHandler {
@@ -61,6 +88,7 @@ impl EventHandler {
             config,
             event: Gesture::None,
             cache: GestureCache::new(),
+            throttle: ThrottleState::new(120), // 120 FPS limit for wayland updates
         }
     }
 
@@ -102,8 +130,15 @@ impl EventHandler {
 
     pub fn main_loop(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) -> Result<()> {
         loop {
+            // Check shutdown flag
+            if crate::SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) {
+                log::info!("Received shutdown signal, exiting event loop");
+                break;
+            }
+
             let mut fds = [PollFd::new(input.as_fd(), PollFlags::POLLIN)];
-            match poll(&mut fds, PollTimeout::NONE) {
+            // Use timeout instead of NONE to allow checking shutdown flag
+            match poll(&mut fds, PollTimeout::try_from(100).unwrap()) {
                 Ok(_) => {
                     self.handle_event(input, xdoh)?;
                 }
@@ -115,6 +150,7 @@ impl EventHandler {
                 }
             }
         }
+        Ok(())
     }
 
     pub fn handle_event(&mut self, input: &mut Libinput, xdoh: &mut XDoHandler) -> Result<()> {
@@ -348,6 +384,9 @@ impl EventHandler {
 
         log::debug!("{:?} {:?}", &current_dir, &fingers);
 
+        // Check throttle before processing
+        let should_throttle_update = !self.throttle.should_update();
+
         let current_dir = current_dir.clone();
         self.handle_matching_gesture(fingers, xdoh, move |gesture, xdoh| {
             if let Gesture::Swipe(j) = gesture {
@@ -357,7 +396,8 @@ impl EventHandler {
                         (dx * acceleration) as i32,
                         (dy * acceleration) as i32,
                     );
-                } else if j.direction == current_dir || j.direction == SwipeDir::Any {
+                } else if (j.direction == current_dir || j.direction == SwipeDir::Any) && !should_throttle_update {
+                    // Throttle wayland command execution
                     exec_command_from_string(j.update.as_deref().unwrap_or(""), dx, dy, 0.0, 0.0)?;
                 }
             }
