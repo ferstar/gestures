@@ -88,7 +88,7 @@ impl EventHandler {
             config,
             event: Gesture::None,
             cache: GestureCache::new(),
-            throttle: ThrottleState::new(120), // 120 FPS limit for wayland updates
+            throttle: ThrottleState::new(60), // 60 FPS (~16ms) considering ydotool ~100ms latency
         }
     }
 
