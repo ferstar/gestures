@@ -1,79 +1,131 @@
-> This fork repo mainly focus on the performance of three-figure-dragging feature.
-
-> for more tech details, please vist this discussion: https://github.com/riley-martin/gestures/discussions/6
-
-> My own compiled binaries(maybe not too synchronized with the latest source code）and configuration can be found at https://github.com/ferstar/gestures/releases
-
-> OR, you can install(compile) it with cargo by yourself like this: cargo install --git https://github.com/ferstar/gestures.git
-
-> ~~NOTE: ONLY WORKS ON X11, NO WAYLAND SUPPORT YET!~~
-> Now support both Xorg and Wayland(with the help of ydotool power)
-
----
 # Gestures
+
+> This fork focuses on high-performance three-finger dragging with optimizations for both X11 and Wayland.
+>
+> For technical details, see: https://github.com/riley-martin/gestures/discussions/6
+>
+> Pre-compiled binaries: https://github.com/ferstar/gestures/releases
+>
+> Install via cargo: `cargo install --git https://github.com/ferstar/gestures.git`
+
 ## About
-This is a program for intercepting touchpad gestures and executing commands based on them.
-Unlike some alternatives, it directly uses the libinput api rather than parsing the output
-of `libinput debug-events`.
+A libinput-based touchpad gesture handler that executes commands based on gestures.
+Unlike alternatives, it uses the libinput API directly for better performance and reliability.
 
 ## Features
-`gestures` is able to handle libinput swipe events; not only vertical and horizontal but diagonal
-as well.
-- [x] Handle libinput events
-  - [x] Swipe events; vertical, horizontal and diagonal
-  - [x] Pinch events
-  - [x] Hold events
-  - [x] Rotate events
-  - [x] Continuous and one-shot events
-- [x] Config file
+- **Platform Support**: Both X11 and Wayland
+- **High Performance**:
+  - X11: Direct libxdo API for minimal latency
+  - Wayland: Optimized ydotool integration with 60 FPS throttling
+  - Thread pool for command execution (4 workers, prevents PID exhaustion)
+- **Gesture Types**: Swipe (8 directions + any), Pinch, Hold
+- **Advanced Features**:
+  - Mouse acceleration and delay for smooth 3-finger dragging
+  - Real-time config reload via IPC
+  - Graceful shutdown (SIGTERM/SIGINT)
 
 ## Configuration
-See [config.md](./config.md) for configuration instructions.
+See [config.md](./config.md) for detailed configuration instructions.
+
+### Quick Example
+```kdl
+// 3-finger drag (works on both X11 and Wayland)
+swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
+
+// 4-finger workspace switching
+swipe direction="w" fingers=4 end="hyprctl dispatch workspace e-1"
+swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
+```
 
 ## Installation
-### Platforms
-Linux. The testing workflow runs on Ubuntu and I test it myself on ~~Artix Linux~~ Nixos, but it should work on any distro if it uses the
-`libinput` touchpad driver rather than the older `synaptics` driver.  
-Note: If your DE/WM has its own touchpad gestures system, it may need to be disabled to
-prevent conflicts.
-### Nix
-If you are using flakes, simply add `gestures.url = "github:ferstar/gestures";` to your flake inputs
-and add `inputs.gestures.packages.${system}.gestures` to your `home.packages` or `environment.systemPackages`. You can also create a service in
-`systemd.user.services`.
 
-### Dependencies
-You may need to install `libudev` and `libinput`, or their equivalant for your distro, and possibly the `dev` versions as well.
+### Prerequisites
+**System packages:**
+- `libudev-dev` / `libudev-devel`
+- `libinput-dev` / `libinput-devel`
+
+**Runtime dependencies:**
+- X11: `xdotool` (for 3-finger drag)
+- Wayland: `ydotool` + `ydotoold` daemon (for 3-finger drag)
 
 ### With Cargo
-If you have cargo installed, simply use `cargo install --git https://github.com/ferstar/gestures.git`
+```bash
+cargo install --git https://github.com/ferstar/gestures.git
+```
 
-### Manual installation
-- Clone the repo
-  - `git clone https://github.com/ferstar/gestures && cd gestures`
+### Manual Build
+```bash
+git clone https://github.com/ferstar/gestures
+cd gestures
+cargo build --release
+sudo cp target/release/gestures /usr/local/bin/
+```
 
-- Build
-  - `cargo build --release`
+### Nix Flakes
+```nix
+# flake.nix
+{
+  inputs.gestures.url = "github:ferstar/gestures";
 
-- Copy `./target/release/gestures` to a convenient place and execute it
+  # Then add to packages:
+  # inputs.gestures.packages.${system}.gestures
+}
+```
 
-### Autostart
-#### Systemd
-Drop [examples/gestures.service](./examples/gestures.service) into `~/.config/systemd/user/gestures.service`
-and modify it for your system (mainly the "$HOME" environment variable and the `ExecStart` will need changed).
-To have it start automatically, run `systemctl --user enable --now gestures.service`.
+## Running
 
-#### Other init systems
-I haven't used any other init systems, but the service is quite simple so it should be easy to modify
-for other systems.
+### Systemd (Recommended)
+```bash
+# Copy service file
+cp examples/gestures.service ~/.config/systemd/user/
+
+# Edit paths in the service file
+vim ~/.config/systemd/user/gestures.service
+
+# Enable and start
+systemctl --user enable --now gestures.service
+```
+
+### Manual
+```bash
+# X11
+gestures start
+
+# Wayland
+gestures -w start
+
+# Reload config
+gestures reload
+```
+
+## Performance Optimizations
+
+This fork includes several performance improvements:
+
+1. **Regex Caching**: One-time compilation using `once_cell::Lazy`
+2. **Thread Pool**: 4-worker pool prevents PID exhaustion during fast gestures
+3. **FPS Throttling**: 60 FPS limit for Wayland (considering ydotool ~100ms latency)
+4. **Timer-based Delays**: Non-blocking mouse-up delays for smooth dragging
+5. **Event Caching**: 1-second cache for gesture configuration lookups
+
+## Troubleshooting
+
+### High CPU on Wayland
+- Default 60 FPS throttle should keep CPU <5%
+- Adjust in `src/event_handler.rs` line 89 if needed
+
+### 3-Finger Drag Not Working
+**X11:**
+- Ensure `xdotool` is installed: `which xdotool`
+
+**Wayland:**
+- Ensure `ydotoold` daemon is running: `systemctl --user status ydotoold`
+- Install ydotool: https://github.com/ReimuNotMoe/ydotool
+
+### Conflicts with DE Gestures
+Disable built-in gestures in your desktop environment (GNOME, KDE, etc.)
 
 ## Alternatives
-Here are some alternatives with similar features.
-
-- [libinput-gestures](https://github.com/bulletmark/libinput-gestures)
-Parses output of `libinput debug-events` rather than using libinput api.
-- [gebaar](https://github.com/Coffee2CodeNL/gebaar-libinput)
-Only supports swipe gestures
-- [gebaar-libinput-fork](https://github.com/osleg/gebaar-libinput-fork)
-Fork of gebaar which supports other gestures
-- [fusuma](https://github.com/iberianpig/fusuma)
-Also parses `libinput debug-events` output
+- [libinput-gestures](https://github.com/bulletmark/libinput-gestures) - Parses debug output
+- [gebaar](https://github.com/Coffee2CodeNL/gebaar-libinput) - Swipe only
+- [fusuma](https://github.com/iberianpig/fusuma) - Ruby-based

@@ -1,53 +1,146 @@
-# Gestures configuration
+# Gestures Configuration
+
 ## Location
-The configuration is looked for at `$XDG_CONFIG_HOME/gestures.kdl` and then at
-`$XDG_CONFIG_HOME/gestures/gestures.kdl`. If `XDG_CONFIG_HOME` is not set, `$HOME/.config` is used
-instead.
+Configuration file is searched in order:
+1. `$XDG_CONFIG_HOME/gestures.kdl`
+2. `$XDG_CONFIG_HOME/gestures/gestures.kdl`
+3. `~/.config/gestures.kdl` (if XDG_CONFIG_HOME is unset)
 
 ## Format
-The configuration format (since 0.5.0) uses [`kdl`](https://kdl.dev).
-```kdl
-// Swipe requires a direction and fingers field at least
-// direction can be one of "nw", "n", "ne", "w", "any", "e", "sw", "s", or "se"
-// fingers is the number of fingers used to trigger the action
-// start, update, and end are all optional. They are executed with `sh -c` and are executed when
-// the gesture is started, recieves an update event and ends.
-//
-// In all of the fields which execute a shell command, `delta_x`, `delta_y` and `scale` are replaced
-// with the delta in the x and y directions and the scale (movement farther apart or closer together)
-// of the gesture. If they are used for an action in which they do not make sense (e.g. using 
-// `scale` in the swipe gesture, 0.0 is used as the value.)
-//
+Uses [KDL](https://kdl.dev) configuration language (since v0.5.0).
 
-// For example, this will make a 3-finger-drag in any direction move the mouse(like the macOS 3-finger-drag)
-// Your fingers can temporarily leave the touchpad for up to 500ms before the drag is cancelled.
-// The acceleration is set to 20, which means that the mouse will move 20/10=2 times faster than your current mouse speed.
-// NOTE: This config works on both X11 and Wayland.
-// On X11, it uses xdotool api directly for better performance.
-// On Wayland, it uses ydotool (you need to install ydotool and run ydotoold daemon).
+## Swipe Gestures
+
+### Basic Syntax
+```kdl
+swipe direction="<dir>" fingers=<n> [start="<cmd>"] [update="<cmd>"] [end="<cmd>"]
+```
+
+**Parameters:**
+- `direction`: `n`, `s`, `e`, `w`, `ne`, `nw`, `se`, `sw`, or `any`
+- `fingers`: Number of fingers (typically 3 or 4)
+- `start`: Command executed when gesture begins (optional)
+- `update`: Command executed on each movement update (optional)
+- `end`: Command executed when gesture ends (optional)
+
+**Variable Substitution:**
+In commands, these variables are replaced with actual values:
+- `$delta_x`: Horizontal movement delta
+- `$delta_y`: Vertical movement delta
+- `$scale`: Pinch scale (for pinch gestures)
+- `$delta_angle`: Rotation angle (for pinch gestures)
+
+### 3-Finger Drag (macOS-like)
+
+**Works on both X11 and Wayland:**
+```kdl
+swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
+```
+
+**Parameters:**
+- `mouse-up-delay`: Delay in milliseconds before releasing mouse button (allows finger to leave trackpad temporarily)
+- `acceleration`: Mouse speed multiplier (20 = 2x speed, 10 = 1x speed)
+
+**Requirements:**
+- X11: Install `xdotool`
+- Wayland: Install `ydotool` and run `ydotoold` daemon
+
+**How it works:**
+- X11: Uses libxdo API directly (minimal latency)
+- Wayland: Uses timer-scheduled ydotool commands (optimized with 60 FPS throttling)
+
+### Manual Wayland Control
+If you prefer full control over Wayland commands:
+```kdl
+swipe direction="any" fingers=3 \
+  start="ydotool click -- 0x40" \
+  update="ydotool mousemove -x $delta_x -y $delta_y" \
+  end="ydotool click -- 0x80"
+```
+
+### Workspace Switching Examples
+
+**Hyprland:**
+```kdl
+swipe direction="w" fingers=4 end="hyprctl dispatch workspace e-1"
+swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
+swipe direction="n" fingers=4 end="hyprctl dispatch fullscreen"
+swipe direction="s" fingers=4 end="hyprctl dispatch killactive"
+```
+
+**i3/Sway:**
+```kdl
+swipe direction="w" fingers=4 end="i3-msg workspace prev"
+swipe direction="e" fingers=4 end="i3-msg workspace next"
+```
+
+**GNOME:**
+```kdl
+swipe direction="n" fingers=4 end="gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.gnome.Shell.Eval global.workspace_manager.get_active_workspace().get_neighbor(Meta.MotionDirection.UP).activate(global.get_current_time())"
+```
+
+## Pinch Gestures
+
+### Syntax
+```kdl
+pinch direction="<in|out>" fingers=<n> [start="<cmd>"] [update="<cmd>"] [end="<cmd>"]
+```
+
+### Examples
+```kdl
+// Zoom in browser
+pinch direction="out" fingers=2 end="xdotool key ctrl+plus"
+pinch direction="in" fingers=2 end="xdotool key ctrl+minus"
+
+// With continuous updates
+pinch direction="out" fingers=2 \
+  update="notify-send 'Scaling: $scale'"
+```
+
+## Hold Gestures
+
+### Syntax
+```kdl
+hold fingers=<n> action="<cmd>"
+```
+
+### Examples
+```kdl
+// Show launcher
+hold fingers=4 action="rofi -show drun"
+
+// Screenshot
+hold fingers=3 action="flameshot gui"
+```
+
+## Complete Example Configuration
+
+```kdl
+// 3-finger drag (X11 + Wayland)
 swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
 
-// The below config is for manual control on Wayland if you don't want to use the simplified config above.
-// You need to install ydotool to use it.
-// swipe direction="any" fingers=3 update="ydotool mousemove  -x $delta_x -y $delta_y" start="ydotool click -- 0x40" end="ydotool click -- 0x80"
+// Workspace navigation
+swipe direction="w" fingers=4 end="hyprctl dispatch workspace e-1"
+swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
 
-swipe direction="w" fingers=4 end="xdotool key alt+Right"
-swipe direction="e" fingers=4 end="xdotool key alt+Left"
+// Application launcher
+swipe direction="n" fingers=4 end="rofi -show drun"
 
-// This will make a 4-finger swipe up open the application launcher
-// (assuming you have a shortcut for it)
-// The default shortcut for KDE may be "super+w"
-swipe direction="n" fingers=4 update="" start="" end="xdotool key super+s"
+// Close window
+swipe direction="s" fingers=4 end="hyprctl dispatch killactive"
 
-// This will make a 4-finger swipe down close the current window
-swipe direction="s" fingers=4 update="" start="" end="xdotool key ctrl+w"
+// Browser zoom
+pinch direction="in" fingers=2 end="xdotool key ctrl+minus"
+pinch direction="out" fingers=2 end="xdotool key ctrl+plus"
 
-// pinch direction can be "in" or "out". Other fields are the same as for
-// the swipe gesture
-pinch direction="in" fingers=4 end="xdotool key Ctrl+minus"
-pinch direction="out" fingers=4 end="xdotool key Ctrl+plus"
-
-// Hold only has one action, rather than start, end and update, because it does not
-// make much sense to update it.
-// hold fingers=4 action="xdotool key Super_L"
+// App launcher on hold
+hold fingers=4 action="rofi -show drun"
 ```
+
+## Tips
+
+1. **Test commands first**: Run commands manually before adding to config
+2. **Reload config**: `gestures reload` (no restart needed)
+3. **Wayland ydotool**: Ensure `ydotoold` daemon is running
+4. **Disable DE gestures**: Prevent conflicts with built-in gestures
+5. **Check logs**: Run `journalctl --user -u gestures -f` for debugging
