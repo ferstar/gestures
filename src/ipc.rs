@@ -8,16 +8,6 @@ use std::time::Duration;
 
 use crate::config::Config;
 
-struct IpcListener(UnixListener);
-
-impl Drop for IpcListener {
-    fn drop(&mut self) {
-        let addr = self.0.local_addr().expect("Couldn't get socket address");
-        let path = addr.as_pathname().expect("Socket address is not a path");
-        std::fs::remove_file(path).expect("Could not remove socket");
-    }
-}
-
 pub fn create_socket(config: Arc<RwLock<Config>>) {
     let socket_dir = env::var("XDG_RUNTIME_DIR").unwrap_or("/tmp".to_string());
     let socket_path = format!("{}/gestures.sock", socket_dir);
