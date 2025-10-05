@@ -47,6 +47,8 @@ swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
 **Runtime dependencies:**
 - X11: `xdotool` (for 3-finger drag)
 - Wayland: `ydotool` + `ydotoold` daemon (for 3-finger drag)
+  - **Important**: Use official binaries from [ydotool releases](https://github.com/ReimuNotMoe/ydotool/releases)
+  - Distribution packages may have API incompatibility issues
 
 ### With Cargo
 ```bash
@@ -119,8 +121,9 @@ This fork includes several performance improvements:
 - Ensure `xdotool` is installed: `which xdotool`
 
 **Wayland:**
+- **Use official ydotool binaries** from [releases](https://github.com/ReimuNotMoe/ydotool/releases) (distro packages may have API issues)
 - Ensure `ydotoold` daemon is running: `systemctl --user status ydotoold`
-- Install ydotool: https://github.com/ReimuNotMoe/ydotool
+- Configure uinput permissions (see [issue #4](https://github.com/ferstar/gestures/issues/4))
 
 ### Conflicts with DE Gestures
 Disable built-in gestures in your desktop environment (GNOME, KDE, etc.)

@@ -1,6 +1,6 @@
 [package]
 name = "gestures"
-version = "0.6.3"
+version = "0.7.0"
 edition = "2021"
 license = "MIT"
 description = "Libinput based touchpad gestures program"
@@ -8,20 +8,19 @@ repository = "https://github.com/ferstar/gestures"
 keywords = ["touchpad", "gestures", "libinput", "multitouch", "linux"]
 
 [dependencies]
-clap = { version = "4.5.20", features = ["derive"] }
-input = "0.9.1"
-nix = {version = "0.29.0", features = ["poll", "fs"]}
-anyhow = "1.0.93"
-regex = "1.11.1"
-log = "0.4.22"
-env_logger = { version = "0.11.5", features = ["auto-color"] }
-miette = { version = "7.2.0", features = ["fancy"] }
-knuffel = "3.2.0"
-libxdo = "0.6.0"
-timer = "0.2.0"
-chrono = "0.4.38"
-parking_lot = "0.12"
-ctrlc = "3.4.5"
+chrono = "0.4"
+clap = { version = "4.5", features = ["derive"] }
+ctrlc = "3.4"
+env_logger = { version = "0.11", features = ["auto-color"] }
+input = "0.9"
+knuffel = "3.2"
+libxdo = "0.6"
+log = "0.4"
+miette = { version = "7.2", features = ["fancy"] }
+nix = { version = "0.29", features = ["poll", "fs"] }
 once_cell = "1.20"
+parking_lot = "0.12"
+regex = "1.11"
 signal-hook = "0.3"
 threadpool = "1.8"
+timer = "0.2"
