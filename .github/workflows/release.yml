@@ -134,7 +134,11 @@ jobs:
           # Add arm64 architecture
           sudo dpkg --add-architecture arm64
 
-          # Configure arm64 to use ports.ubuntu.com
+          # Restrict default sources to amd64 only
+          sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list
+          sudo sed -i 's/^deb-src /deb-src [arch=amd64] /' /etc/apt/sources.list
+
+          # Add arm64 sources pointing to ports.ubuntu.com
           sudo tee /etc/apt/sources.list.d/arm64.list > /dev/null <<EOF
           deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main universe
           deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe
