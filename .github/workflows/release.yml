@@ -107,53 +107,16 @@ jobs:
         with:
           shared-key: "release-${{ matrix.target }}"
 
-      - name: Grant permissions to APT cache directory
-        run: sudo chown -R $USER:$USER /var/cache/apt/archives
-
-      - name: Cache APT packages
-        id: apt-cache
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-packages-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('.github/workflows/release.yml') }}
-          restore-keys: |
-            apt-packages-${{ runner.os }}-${{ matrix.target }}-
-            apt-packages-${{ runner.os }}-
-
       - name: Install system dependencies (x86_64)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
-          if [[ "${{ steps.apt-cache.outputs.cache-hit }}" != "true" ]]; then
-            sudo apt-get update
-          fi
+          sudo apt-get update
           sudo apt-get install -y libudev-dev libinput-dev libxdo-dev
 
-      - name: Install system dependencies (aarch64)
+      - name: Install cross for aarch64
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
-          # Add arm64 architecture
-          sudo dpkg --add-architecture arm64
-
-          # Restrict default sources to amd64 only
-          sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list
-          sudo sed -i 's/^deb-src /deb-src [arch=amd64] /' /etc/apt/sources.list
-
-          # Add arm64 sources pointing to ports.ubuntu.com
-          sudo tee /etc/apt/sources.list.d/arm64.list > /dev/null <<EOF
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main universe
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe
-          EOF
-
-          if [[ "${{ steps.apt-cache.outputs.cache-hit }}" != "true" ]]; then
-            sudo apt-get update
-            sudo apt-get install -y gcc-aarch64-linux-gnu libudev-dev:arm64 libinput-dev:arm64 libxdo-dev:arm64
-          else
-            # With cache, just install packages from cache
-            sudo apt-get install -y gcc-aarch64-linux-gnu libudev-dev:arm64 libinput-dev:arm64 libxdo-dev:arm64
-          fi
-
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Update version if specified
         if: github.event.inputs.version != ''
@@ -162,11 +125,24 @@ jobs:
           sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
           echo "Updated version to $VERSION"
 
-      - name: Build release
+      - name: Build release (x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: cargo build --release --target ${{ matrix.target }} --verbose
 
-      - name: Strip binary
+      - name: Build release (aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cross build --release --target ${{ matrix.target }} --verbose
+
+      - name: Strip binary (x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+      - name: Strip binary (aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          docker run --rm -v $PWD:/project -w /project \
+            ghcr.io/cross-rs/aarch64-unknown-linux-gnu:latest \
+            aarch64-linux-gnu-strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
 
       - name: Create tarball
         run: |
