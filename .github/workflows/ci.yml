@@ -43,7 +43,8 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: lint
+          shared-key: "ci-ubuntu"
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' }}
 
       - name: Install system dependencies
         run: |
@@ -72,7 +73,8 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: test
+          shared-key: "ci-ubuntu"
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' }}
 
       - name: Install system dependencies
         run: |
@@ -101,7 +103,8 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: release
+          shared-key: "ci-ubuntu"
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' }}
 
       - name: Install system dependencies
         run: |
