@@ -13,7 +13,10 @@ pub fn handle_command(cmd: Commands) {
     #[allow(clippy::single_match)]
     match cmd {
         Commands::Reload => {
-            stream.write_all(b"reload").map_err(|e| panic!("Failed to write to socket: {e}")).unwrap();
+            stream
+                .write_all(b"reload")
+                .map_err(|e| panic!("Failed to write to socket: {e}"))
+                .unwrap();
         }
         _ => (),
     }

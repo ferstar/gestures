@@ -87,7 +87,13 @@ impl MouseHandler {
             let _ = tx.send((MouseCommand::MoveMouseRelative, x_val, y_val));
         } else {
             let _ = Command::new("ydotool")
-                .args(&["mousemove", "-x", &x_val.to_string(), "-y", &y_val.to_string()])
+                .args(&[
+                    "mousemove",
+                    "-x",
+                    &x_val.to_string(),
+                    "-y",
+                    &y_val.to_string(),
+                ])
                 .spawn();
         }
     }

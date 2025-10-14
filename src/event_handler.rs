@@ -26,11 +26,11 @@ use nix::{
 
 use crate::config::Config;
 use crate::gestures::{hold::*, pinch::*, swipe::*, *};
-use crate::utils::exec_command_from_string;
 use crate::mouse_handler::MouseHandler;
+use crate::utils::exec_command_from_string;
 
-use std::collections::HashMap;
 use parking_lot::RwLock;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 struct GestureCache {
@@ -343,9 +343,7 @@ impl EventHandler {
 
     fn is_direct_mouse_gesture(gesture: &Gesture) -> bool {
         if let Gesture::Swipe(j) = gesture {
-            j.acceleration.is_some()
-                && j.mouse_up_delay.is_some()
-                && j.direction == SwipeDir::Any
+            j.acceleration.is_some() && j.mouse_up_delay.is_some() && j.direction == SwipeDir::Any
         } else {
             false
         }
@@ -384,11 +382,10 @@ impl EventHandler {
             if let Gesture::Swipe(j) = gesture {
                 if Self::is_direct_mouse_gesture(gesture) {
                     let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
-                    mh.move_mouse_relative(
-                        (dx * acceleration) as i32,
-                        (dy * acceleration) as i32,
-                    );
-                } else if (j.direction == current_dir || j.direction == SwipeDir::Any) && !should_throttle_update {
+                    mh.move_mouse_relative((dx * acceleration) as i32, (dy * acceleration) as i32);
+                } else if (j.direction == current_dir || j.direction == SwipeDir::Any)
+                    && !should_throttle_update
+                {
                     exec_command_from_string(j.update.as_deref().unwrap_or(""), dx, dy, 0.0, 0.0)?;
                 }
             }
@@ -411,13 +408,7 @@ impl EventHandler {
                     let delay = j.mouse_up_delay.unwrap_or_default();
                     mh.mouse_up_delay(1, delay);
                 } else if j.direction == direction || j.direction == SwipeDir::Any {
-                    exec_command_from_string(
-                        j.end.as_deref().unwrap_or(""),
-                        0.0,
-                        0.0,
-                        0.0,
-                        0.0,
-                    )?;
+                    exec_command_from_string(j.end.as_deref().unwrap_or(""), 0.0, 0.0, 0.0, 0.0)?;
                 }
             }
             Ok(())

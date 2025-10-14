@@ -27,6 +27,18 @@ Unlike alternatives, it uses the libinput API directly for better performance an
 ## Configuration
 See [config.md](./config.md) for detailed configuration instructions.
 
+### Quick Setup
+```bash
+# Generate default config file
+gestures generate-config
+
+# Preview config without installing
+gestures generate-config --print
+
+# Force overwrite existing config
+gestures generate-config --force
+```
+
 ### Quick Example
 ```kdl
 // 3-finger drag (works on both X11 and Wayland)
@@ -47,8 +59,7 @@ swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
 **Runtime dependencies:**
 - X11: `xdotool` (for 3-finger drag)
 - Wayland: `ydotool` + `ydotoold` daemon (for 3-finger drag)
-  - **Important**: Use official binaries from [ydotool releases](https://github.com/ReimuNotMoe/ydotool/releases)
-  - Distribution packages may have API incompatibility issues
+  - If your distribution package has issues, try the official [ydotool binaries from GitHub releases](https://github.com/ReimuNotMoe/ydotool/releases)
 
 ### With Cargo
 ```bash
@@ -78,27 +89,35 @@ sudo cp target/release/gestures /usr/local/bin/
 
 ### Systemd (Recommended)
 ```bash
-# Copy service file
-cp examples/gestures.service ~/.config/systemd/user/
+# 1. Generate config file (first time only)
+gestures generate-config
 
-# Edit paths in the service file
-vim ~/.config/systemd/user/gestures.service
+# 2. Install service file
+gestures install-service
 
-# Enable and start
+# 3. Enable and start the service
 systemctl --user enable --now gestures.service
 ```
 
 ### Manual
 ```bash
-# X11
+# Auto-detect display server (X11 or Wayland)
 gestures start
 
-# Wayland
-gestures -w start
+# Force Wayland mode (if needed)
+gestures --wayland start
+
+# Force X11 mode (if needed)
+gestures --x11 start
 
 # Reload config
 gestures reload
+
+# Preview service file (without installing)
+gestures install-service --print
 ```
+
+**Note**: The display server (X11/Wayland) is automatically detected via `WAYLAND_DISPLAY` and `XDG_SESSION_TYPE` environment variables. Manual override is rarely needed.
 
 ## Performance Optimizations
 
@@ -121,7 +140,7 @@ This fork includes several performance improvements:
 - Ensure `xdotool` is installed: `which xdotool`
 
 **Wayland:**
-- **Use official ydotool binaries** from [releases](https://github.com/ReimuNotMoe/ydotool/releases) (distro packages may have API issues)
+- If your distribution package has issues, try the official [ydotool binaries from GitHub releases](https://github.com/ReimuNotMoe/ydotool/releases)
 - Ensure `ydotoold` daemon is running: `systemctl --user status ydotoold`
 - Configure uinput permissions (see [issue #4](https://github.com/ferstar/gestures/issues/4))
 
