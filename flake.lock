@@ -1,18 +1,17 @@
 {
   "nodes": {
-    "crate2nix": {
-      "flake": false,
+    "crane": {
       "locked": {
-        "lastModified": 1734429562,
-        "narHash": "sha256-V2XNs3Ir8WXNHdocfzkR/fu0FzkZ9uTDJkVecxJrGmQ=",
-        "owner": "kolloch",
-        "repo": "crate2nix",
-        "rev": "8537c2d7cb623679aaeff62c4c4c43a91566ab09",
+        "lastModified": 1759893430,
+        "narHash": "sha256-yAy4otLYm9iZ+NtQwTMEbqHwswSFUbhn7x826RR6djw=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "1979a2524cb8c801520bd94c38bb3d5692419d93",
         "type": "github"
       },
       "original": {
-        "owner": "kolloch",
-        "repo": "crate2nix",
+        "owner": "ipetkov",
+        "repo": "crane",
         "type": "github"
       }
     },
@@ -85,7 +84,7 @@
     },
     "root": {
       "inputs": {
-        "crate2nix": "crate2nix",
+        "crane": "crane",
         "fenix": "fenix",
         "flake-compat": "flake-compat",
         "nixpkgs": "nixpkgs_2",
