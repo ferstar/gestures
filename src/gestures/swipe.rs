@@ -38,6 +38,8 @@ pub enum SwipeDir {
 
 impl SwipeDir {
     pub fn dir(x: f64, y: f64) -> SwipeDir {
+        use std::f64::consts::FRAC_PI_8;
+
         if x == 0.0 && y == 0.0 {
             return SwipeDir::Any;
         }
@@ -45,15 +47,15 @@ impl SwipeDir {
         let angle = y.atan2(x); // Range: -π to π
 
         match angle {
-            a if a < -2.7489 => SwipeDir::W,  // -π to -7π/8
-            a if a < -1.9635 => SwipeDir::NW, // -7π/8 to -5π/8
-            a if a < -1.1781 => SwipeDir::N,  // -5π/8 to -3π/8
-            a if a < -0.3927 => SwipeDir::NE, // -3π/8 to -π/8
-            a if a < 0.3927 => SwipeDir::E,   // -π/8 to π/8
-            a if a < 1.1781 => SwipeDir::SE,  // π/8 to 3π/8
-            a if a < 1.9635 => SwipeDir::S,   // 3π/8 to 5π/8
-            a if a < 2.7489 => SwipeDir::SW,  // 5π/8 to 7π/8
-            _ => SwipeDir::W,                 // 7π/8 to π
+            a if a < -7.0 * FRAC_PI_8 => SwipeDir::W,  // -π to -7π/8
+            a if a < -5.0 * FRAC_PI_8 => SwipeDir::NW, // -7π/8 to -5π/8
+            a if a < -3.0 * FRAC_PI_8 => SwipeDir::N,  // -5π/8 to -3π/8
+            a if a < -FRAC_PI_8 => SwipeDir::NE,       // -3π/8 to -π/8
+            a if a < FRAC_PI_8 => SwipeDir::E,         // -π/8 to π/8
+            a if a < 3.0 * FRAC_PI_8 => SwipeDir::SE,  // π/8 to 3π/8
+            a if a < 5.0 * FRAC_PI_8 => SwipeDir::S,   // 3π/8 to 5π/8
+            a if a < 7.0 * FRAC_PI_8 => SwipeDir::SW,  // 5π/8 to 7π/8
+            _ => SwipeDir::W,                          // 7π/8 to π
         }
     }
 }

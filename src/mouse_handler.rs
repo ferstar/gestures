@@ -53,7 +53,7 @@ impl MouseHandler {
             let _ = tx.send((MouseCommand::MouseDown, button, 255));
         } else {
             let _ = Command::new("ydotool")
-                .args(&["click", "--", "0x40"])
+                .args(["click", "--", "0x40"])
                 .spawn();
         }
         self.handler_mouse_down = true;
@@ -73,7 +73,7 @@ impl MouseHandler {
                 Duration::milliseconds(delay_ms),
                 move || {
                     let _ = Command::new("ydotool")
-                        .args(&["click", "--", "0x80"])
+                        .args(["click", "--", "0x80"])
                         .spawn();
                 },
             ));
@@ -87,7 +87,7 @@ impl MouseHandler {
             let _ = tx.send((MouseCommand::MoveMouseRelative, x_val, y_val));
         } else {
             let _ = Command::new("ydotool")
-                .args(&[
+                .args([
                     "mousemove",
                     "-x",
                     &x_val.to_string(),
