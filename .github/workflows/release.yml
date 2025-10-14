@@ -86,10 +86,12 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: gestures
             asset_name: gestures-linux-x86_64
-          - os: ubuntu-24.04-arm64
+            use-cross: false
+          - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             artifact_name: gestures
             asset_name: gestures-linux-aarch64
+            use-cross: true
 
     steps:
       - name: Checkout code
@@ -105,12 +107,19 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "release-${{ matrix.os }}"
+          shared-key: "release-${{ matrix.target }}"
 
-      - name: Install system dependencies
+      - name: Install system dependencies (x86_64)
+        if: matrix.use-cross == false
         run: |
           sudo apt-get update
           sudo apt-get install -y libudev-dev libinput-dev libxdo-dev
+
+      - name: Install cross (aarch64)
+        if: matrix.use-cross == true
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
 
       - name: Update version if specified
         if: github.event.inputs.version != ''
@@ -120,7 +129,12 @@ jobs:
           echo "Updated version to $VERSION"
 
       - name: Build release
-        run: cargo build --release --target ${{ matrix.target }} --verbose
+        run: |
+          if [[ "${{ matrix.use-cross }}" == "true" ]]; then
+            cross build --release --target ${{ matrix.target }} --verbose
+          else
+            cargo build --release --target ${{ matrix.target }} --verbose
+          fi
 
       - name: Strip binary
         run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
