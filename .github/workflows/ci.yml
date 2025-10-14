@@ -46,9 +46,23 @@ jobs:
           shared-key: "ci-ubuntu"
           save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' }}
 
+      - name: Grant permissions to APT cache directory
+        run: sudo chown -R $USER:$USER /var/cache/apt/archives
+
+      - name: Cache APT packages
+        id: apt-cache
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-packages-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            apt-packages-${{ runner.os }}-
+
       - name: Install system dependencies
         run: |
-          sudo apt-get update
+          if [[ "${{ steps.apt-cache.outputs.cache-hit }}" != "true" ]]; then
+            sudo apt-get update
+          fi
           sudo apt-get install -y libudev-dev libinput-dev libxdo-dev
 
       - name: Check formatting
@@ -76,9 +90,23 @@ jobs:
           shared-key: "ci-ubuntu"
           save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' }}
 
+      - name: Grant permissions to APT cache directory
+        run: sudo chown -R $USER:$USER /var/cache/apt/archives
+
+      - name: Cache APT packages
+        id: apt-cache
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-packages-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            apt-packages-${{ runner.os }}-
+
       - name: Install system dependencies
         run: |
-          sudo apt-get update
+          if [[ "${{ steps.apt-cache.outputs.cache-hit }}" != "true" ]]; then
+            sudo apt-get update
+          fi
           sudo apt-get install -y libudev-dev libinput-dev libxdo-dev
 
       - name: Build
@@ -106,9 +134,23 @@ jobs:
           shared-key: "ci-ubuntu"
           save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' }}
 
+      - name: Grant permissions to APT cache directory
+        run: sudo chown -R $USER:$USER /var/cache/apt/archives
+
+      - name: Cache APT packages
+        id: apt-cache
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-packages-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            apt-packages-${{ runner.os }}-
+
       - name: Install system dependencies
         run: |
-          sudo apt-get update
+          if [[ "${{ steps.apt-cache.outputs.cache-hit }}" != "true" ]]; then
+            sudo apt-get update
+          fi
           sudo apt-get install -y libudev-dev libinput-dev libxdo-dev
 
       - name: Build release

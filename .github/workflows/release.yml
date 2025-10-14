@@ -48,9 +48,23 @@ jobs:
         with:
           shared-key: "release-ubuntu"
 
+      - name: Grant permissions to APT cache directory
+        run: sudo chown -R $USER:$USER /var/cache/apt/archives
+
+      - name: Cache APT packages
+        id: apt-cache
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-packages-${{ runner.os }}-${{ hashFiles('.github/workflows/release.yml') }}
+          restore-keys: |
+            apt-packages-${{ runner.os }}-
+
       - name: Install system dependencies
         run: |
-          sudo apt-get update
+          if [[ "${{ steps.apt-cache.outputs.cache-hit }}" != "true" ]]; then
+            sudo apt-get update
+          fi
           sudo apt-get install -y libudev-dev libinput-dev libxdo-dev
 
       - name: Run tests
@@ -93,19 +107,36 @@ jobs:
         with:
           shared-key: "release-${{ matrix.target }}"
 
+      - name: Grant permissions to APT cache directory
+        run: sudo chown -R $USER:$USER /var/cache/apt/archives
+
+      - name: Cache APT packages
+        id: apt-cache
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-packages-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('.github/workflows/release.yml') }}
+          restore-keys: |
+            apt-packages-${{ runner.os }}-${{ matrix.target }}-
+            apt-packages-${{ runner.os }}-
+
       - name: Install system dependencies (x86_64)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
-          sudo apt-get update
+          if [[ "${{ steps.apt-cache.outputs.cache-hit }}" != "true" ]]; then
+            sudo apt-get update
+          fi
           sudo apt-get install -y libudev-dev libinput-dev libxdo-dev
 
       - name: Install system dependencies (aarch64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update
+          if [[ "${{ steps.apt-cache.outputs.cache-hit }}" != "true" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y gcc-aarch64-linux-gnu
+            sudo dpkg --add-architecture arm64
+            sudo apt-get update
+          fi
           sudo apt-get install -y libudev-dev:arm64 libinput-dev:arm64 libxdo-dev:arm64
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
