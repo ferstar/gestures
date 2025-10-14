@@ -10,6 +10,11 @@ on:
         description: "Version to release (e.g., 0.8.0, leave empty to use Cargo.toml version)"
         required: false
         type: string
+      skip_tests:
+        description: "Skip tests before building"
+        required: false
+        default: false
+        type: boolean
       create_tag:
         description: "Create and push git tag"
         required: false
@@ -33,6 +38,7 @@ jobs:
     name: Test before release
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.skip_tests)
 
     steps:
       - name: Checkout code
@@ -77,6 +83,7 @@ jobs:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     needs: test
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     timeout-minutes: 30
     strategy:
       fail-fast: false
