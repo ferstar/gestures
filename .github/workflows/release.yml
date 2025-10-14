@@ -131,17 +131,24 @@ jobs:
       - name: Install system dependencies (aarch64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
+          # Add arm64 architecture
+          sudo dpkg --add-architecture arm64
+
+          # Configure arm64 to use ports.ubuntu.com
+          sudo tee /etc/apt/sources.list.d/arm64.list > /dev/null <<EOF
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main universe
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe
+          EOF
+
           if [[ "${{ steps.apt-cache.outputs.cache-hit }}" != "true" ]]; then
             sudo apt-get update
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-            sudo dpkg --add-architecture arm64
-            sudo apt-get update
-            sudo apt-get install -y libudev-dev:arm64 libinput-dev:arm64 libxdo-dev:arm64
+            sudo apt-get install -y gcc-aarch64-linux-gnu libudev-dev:arm64 libinput-dev:arm64 libxdo-dev:arm64
           else
-            # Even with cache, we need to add architecture and install packages
-            sudo dpkg --add-architecture arm64
+            # With cache, just install packages from cache
             sudo apt-get install -y gcc-aarch64-linux-gnu libudev-dev:arm64 libinput-dev:arm64 libxdo-dev:arm64
           fi
+
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
       - name: Update version if specified
