@@ -135,16 +135,11 @@ jobs:
             -v "$HOME/.rustup-cache":/rust/rustup \
             -w /workspace \
             -e TARGET=${{ matrix.target }} \
+            -e ASSET_NAME=${{ matrix.asset_name }} \
             -e CARGO_HOME=/rust/cargo \
             -e RUSTUP_HOME=/rust/rustup \
             ${{ matrix.container }} \
             /workspace/.github/scripts/build-linux.sh
-
-      - name: Create tarball
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
-          mv ${{ matrix.asset_name }}.tar.gz ../../..
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

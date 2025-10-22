@@ -58,3 +58,19 @@ objdump -T "target/${TARGET}/release/gestures" | grep GLIBC | sed 's/.*GLIBC_\([
 
 echo "==> Build complete"
 ls -lh "target/${TARGET}/release/gestures"
+
+# Create tarball if ASSET_NAME is provided
+if [ -n "${ASSET_NAME:-}" ]; then
+    echo "==> Creating tarball"
+    cd "target/${TARGET}/release"
+    tar czf "${ASSET_NAME}.tar.gz" gestures
+    mv "${ASSET_NAME}.tar.gz" ../../..
+    cd ../../..
+    echo "Tarball created: ${ASSET_NAME}.tar.gz"
+    ls -lh "${ASSET_NAME}.tar.gz"
+fi
+
+# Fix permissions for non-root users
+echo "==> Fixing file permissions"
+chmod -R a+rw target/ || true
+[ -f "${ASSET_NAME}.tar.gz" ] && chmod a+rw "${ASSET_NAME}.tar.gz" || true
