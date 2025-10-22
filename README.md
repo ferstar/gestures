@@ -55,6 +55,7 @@ swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
 **System packages:**
 - `libudev-dev` / `libudev-devel`
 - `libinput-dev` / `libinput-devel`
+- `libxdo-dev` / `libxdo-devel`
 
 **Runtime dependencies:**
 - X11: `xdotool` (for 3-finger drag)

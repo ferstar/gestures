@@ -22,11 +22,10 @@ pub fn exec_command_from_string(args: &str, dx: f64, dy: f64, da: f64, scale: f6
 
         THREAD_POOL.execute(move || {
             log::debug!("{:?}", &args);
-            let _ = Command::new("sh")
-                .arg("-c")
-                .arg(&args)
-                .spawn()
-                .and_then(|mut child| child.wait());
+            let status = Command::new("sh").arg("-c").arg(&args).status();
+            if let Err(e) = status {
+                log::error!("Failed to execute command '{}': {}", &args, e);
+            }
         });
     }
     Ok(())

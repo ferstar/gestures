@@ -1,5 +1,13 @@
 use crate::config::Config;
 use crate::gestures::swipe::SwipeDir;
+use crate::utils::exec_command_from_string;
+
+#[test]
+fn test_zombie_process() {
+    for _ in 0..100 {
+        let _ = exec_command_from_string("echo", 0.0, 0.0, 0.0, 0.0);
+    }
+}
 
 #[test]
 fn test_config_default() {
