@@ -2,3 +2,6 @@
 /result
 /.direnv
 .idea
+
+# Local test scripts with personal configuration
+test-build-local.sh
