@@ -1,11 +1,11 @@
 use chrono::Duration;
 use libxdo::XDo;
+use std::env;
+use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc;
 use std::thread;
 use timer::Timer;
-use std::env;
-use std::path::Path;
 
 #[derive(Copy, Clone)]
 pub enum MouseCommand {
@@ -89,10 +89,12 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
                         let _ = match command {
                             MouseCommand::MouseDown => xdo.mouse_down(param1),
                             MouseCommand::MouseUp => xdo.mouse_up(param1),
-                            MouseCommand::MoveMouseRelative => xdo.move_mouse_relative(param1, param2),
+                            MouseCommand::MoveMouseRelative => {
+                                xdo.move_mouse_relative(param1, param2)
+                            }
                         };
                     }
-                },
+                }
                 Err(e) => {
                     log::error!("Failed to initialize libxdo: {:?}", e);
                     log::warn!("X11 mouse control will not work. Consider:");
