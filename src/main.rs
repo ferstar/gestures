@@ -53,8 +53,6 @@ fn generate_service_file() -> Result<String> {
         .to_str()
         .ok_or_else(|| miette::miette!("Executable path contains invalid UTF-8"))?;
 
-    let display = env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
-
     let service_content = format!(
         r#"[Unit]
 Description=Touchpad Gestures (with 3-finger drag performance improvements)
@@ -62,16 +60,15 @@ Documentation=https://github.com/ferstar/gestures
 
 [Service]
 Environment=PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/bin
-Environment=DISPLAY={}
 Type=simple
 ExecStart={} start
 ExecReload={} reload
-Restart=never
+Restart=no
 
 [Install]
 WantedBy=default.target
 "#,
-        display, exe_path_str, exe_path_str
+        exe_path_str, exe_path_str
     );
 
     Ok(service_content)
