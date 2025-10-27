@@ -113,7 +113,7 @@ jobs:
             target: aarch64-unknown-linux-gnu
             artifact_name: gestures
             asset_name: gestures-linux-aarch64
-            container: quay.io/pypa/manylinux2014_aarch64
+            container: ''
 
     steps:
       - name: Checkout code
@@ -129,14 +129,17 @@ jobs:
           echo "Updated version to $VERSION"
 
       - name: Make build script executable
+        if: matrix.container != ''
         run: chmod +x .github/scripts/build-linux.sh
 
       - name: Set up Docker cache directories
+        if: matrix.container != ''
         run: |
           mkdir -p ~/.cargo-cache
           mkdir -p ~/.rustup-cache
 
-      - name: Cache Rust toolchain and dependencies
+      - name: Cache Rust toolchain and dependencies (Docker)
+        if: matrix.container != ''
         uses: actions/cache@v4
         with:
           path: |
@@ -148,6 +151,7 @@ jobs:
             ${{ runner.os }}-manylinux-rust-
 
       - name: Build in manylinux container
+        if: matrix.container != ''
         run: |
           docker run --rm \
             -v "$(pwd)":/workspace \
@@ -160,6 +164,33 @@ jobs:
             -e RUSTUP_HOME=/rust/rustup \
             ${{ matrix.container }} \
             /workspace/.github/scripts/build-linux.sh
+
+      # Native ARM64 build (no container)
+      - name: Install Rust toolchain (native)
+        if: matrix.container == ''
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache (native)
+        if: matrix.container == ''
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "release-${{ matrix.target }}"
+
+      - name: Install system dependencies (native)
+        if: matrix.container == ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev libinput-dev libxdo-dev
+
+      - name: Build release (native)
+        if: matrix.container == ''
+        run: |
+          cargo build --release --target ${{ matrix.target }} --verbose
+          strip target/${{ matrix.target }}/release/gestures
+          cd target/${{ matrix.target }}/release
+          tar czf ${{ matrix.asset_name }}.tar.gz gestures
+          mv ${{ matrix.asset_name }}.tar.gz ../../..
+          ls -lh ../../../${{ matrix.asset_name }}.tar.gz
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
