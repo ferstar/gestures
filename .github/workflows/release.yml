@@ -137,6 +137,11 @@ jobs:
             artifact_name: gestures
             asset_name: gestures-linux-x86_64
             container: quay.io/pypa/manylinux2014_x86_64
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact_name: gestures
+            asset_name: gestures-linux-aarch64
+            container: quay.io/pypa/manylinux2014_aarch64
 
     steps:
       - name: Checkout code
