@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: ["main", "dev"]
+    branches: ["main"]
     paths:
       - "src/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/ci.yml"
   pull_request:
-    branches: ["main", "dev"]
+    branches: ["main"]
     paths:
       - "src/**"
       - "Cargo.toml"
@@ -44,7 +44,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "ci-ubuntu"
-          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install system dependencies
         run: |
@@ -74,7 +74,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "ci-ubuntu"
-          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install system dependencies
         run: |
@@ -104,7 +104,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "ci-ubuntu"
-          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install system dependencies
         run: |
