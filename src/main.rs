@@ -179,8 +179,7 @@ fn generate_config(print_only: bool, force: bool) -> Result<()> {
     }
 
     // Get config directory
-    let config_home = env::var("XDG_CONFIG_HOME")
-        .unwrap_or_else(|_| format!("{}/.config", env::var("HOME").unwrap()));
+    let config_home = Config::get_config_home()?;
 
     let config_path = PathBuf::from(&config_home).join("gestures.kdl");
 
@@ -220,9 +219,9 @@ fn main() -> Result<()> {
 
     // Setup signal handlers for graceful shutdown
     signal_hook::flag::register(signal_hook::consts::SIGTERM, SHUTDOWN.clone())
-        .expect("Failed to register SIGTERM handler");
+        .map_err(|e| miette::miette!("Failed to register SIGTERM handler: {}", e))?;
     signal_hook::flag::register(signal_hook::consts::SIGINT, SHUTDOWN.clone())
-        .expect("Failed to register SIGINT handler");
+        .map_err(|e| miette::miette!("Failed to register SIGINT handler: {}", e))?;
 
     {
         let mut l = Builder::from_default_env();
@@ -242,19 +241,19 @@ fn main() -> Result<()> {
         l.init();
     }
 
-    let c = if let Some(p) = app.conf {
-        Config::read_from_file(&p)?
-    } else {
-        config::Config::read_default_config().unwrap_or_else(|_| {
-            log::error!("Could not read configuration file, using empty config!");
-            Config::default()
-        })
-    };
+    let config_path = app.conf.clone();
+    let c = Config::read_from_optional_path(config_path.as_deref()).unwrap_or_else(|e| {
+        log::error!(
+            "Could not read configuration file, using empty config: {}",
+            e
+        );
+        Config::default()
+    });
     log::debug!("{:#?}", &c);
 
     match app.command {
         c @ Commands::Reload => {
-            ipc_client::handle_command(c);
+            ipc_client::handle_command(c)?;
         }
         Commands::Start => {
             let is_wayland = if app.wayland {
@@ -271,7 +270,7 @@ fn main() -> Result<()> {
                 );
                 detected
             };
-            run_eh(Arc::new(RwLock::new(c)), is_wayland)?;
+            run_eh(Arc::new(RwLock::new(c)), config_path, is_wayland)?;
         }
         Commands::InstallService { print } => {
             install_service(print)?;
@@ -284,10 +283,19 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_eh(config: Arc<RwLock<Config>>, is_wayland: bool) -> Result<()> {
+fn run_eh(
+    config: Arc<RwLock<Config>>,
+    config_path: Option<PathBuf>,
+    is_wayland: bool,
+) -> Result<()> {
     let eh_thread = spawn_event_handler(config.clone(), is_wayland);
-    ipc::create_socket(config);
-    eh_thread.join().unwrap()?;
+    ipc::create_socket(config, config_path);
+
+    let thread_result = eh_thread
+        .join()
+        .map_err(|_| miette::miette!("Event handler thread panicked"))?;
+    thread_result?;
+
     Ok(())
 }
 
@@ -297,7 +305,7 @@ fn spawn_event_handler(config: Arc<RwLock<Config>>, is_wayland: bool) -> JoinHan
         let mut eh = event_handler::EventHandler::new(config);
         let mut interface = input::Libinput::new_with_udev(event_handler::Interface);
         eh.init(&mut interface)?;
-        let _ = eh.main_loop(&mut interface, &mut start_handler(!is_wayland));
+        eh.main_loop(&mut interface, &mut start_handler(!is_wayland))?;
         Ok(())
     })
 }

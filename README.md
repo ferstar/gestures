@@ -58,7 +58,7 @@ swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
 - `libxdo-dev` / `libxdo-devel`
 
 **Runtime dependencies:**
-- X11: `xdotool` (for 3-finger drag)
+- X11: No extra runtime dependency for drag (uses `libxdo` directly)
 - Wayland: `ydotool` + `ydotoold` daemon (for 3-finger drag)
   - If your distribution package has issues, try the official [ydotool binaries from GitHub releases](https://github.com/ReimuNotMoe/ydotool/releases)
 
@@ -134,11 +134,11 @@ This fork includes several performance improvements:
 
 ### High CPU on Wayland
 - Default 60 FPS throttle should keep CPU <5%
-- Adjust in `src/event_handler.rs` line 89 if needed
+- Adjust in `src/event_handler.rs` (`ThrottleState::new(60)`) if needed
 
 ### 3-Finger Drag Not Working
 **X11:**
-- Ensure `xdotool` is installed: `which xdotool`
+- Ensure X11 session env is correct (`DISPLAY` / `XAUTHORITY`)
 
 **Wayland:**
 - If your distribution package has issues, try the official [ydotool binaries from GitHub releases](https://github.com/ReimuNotMoe/ydotool/releases)

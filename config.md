@@ -42,7 +42,7 @@ swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
 - `acceleration`: Mouse speed multiplier (20 = 2x speed, 10 = 1x speed)
 
 **Requirements:**
-- X11: Install `xdotool`
+- X11: No extra runtime dependency for drag (uses `libxdo` directly)
 - Wayland: Install `ydotool` and run `ydotoold` daemon
 
 **How it works:**

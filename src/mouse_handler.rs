@@ -18,7 +18,6 @@ pub struct MouseHandler {
     tx: Option<mpsc::Sender<(MouseCommand, i32, i32)>>,
     timer: Timer,
     guard: Option<timer::Guard>,
-    handler_mouse_down: bool,
 }
 
 /// Try to setup X11 environment variables by detecting XAUTHORITY file
@@ -77,12 +76,16 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
         // Setup X11 environment before initializing XDo
         setup_x11_env();
 
-        let (tx, rx) = mpsc::channel();
-        thread::spawn(move || {
-            // Try to initialize XDo, fallback to None if it fails
-            let xdo_result = XDo::new(None);
-
-            match xdo_result {
+        // Probe X11 availability before creating the worker thread.
+        // `XDo` is not `Send`, so it must be created inside the worker thread.
+        if let Err(e) = XDo::new(None) {
+            log::error!("Failed to initialize libxdo: {:?}", e);
+            log::warn!("Falling back to ydotool mouse control mode");
+            log::warn!("Check DISPLAY/XAUTHORITY if X11 mode was intended");
+            None
+        } else {
+            let (tx, rx) = mpsc::channel();
+            thread::spawn(move || match XDo::new(None) {
                 Ok(xdo) => {
                     log::info!("Successfully initialized libxdo for X11");
                     while let Ok((command, param1, param2)) = rx.recv() {
@@ -96,16 +99,11 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
                     }
                 }
                 Err(e) => {
-                    log::error!("Failed to initialize libxdo: {:?}", e);
-                    log::warn!("X11 mouse control will not work. Consider:");
-                    log::warn!("  1. Running with --wayland flag to use ydotool instead");
-                    log::warn!("  2. Checking DISPLAY and XAUTHORITY environment variables");
-                    log::warn!("  3. Installing ydotool for Wayland support");
-                    // Don't panic, just exit the thread - will fallback to ydotool mode
+                    log::error!("Failed to initialize libxdo in worker thread: {:?}", e);
                 }
-            }
-        });
-        Some(tx)
+            });
+            Some(tx)
+        }
     } else {
         None
     };
@@ -114,7 +112,6 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
         tx,
         timer: Timer::new(),
         guard: None,
-        handler_mouse_down: false,
     }
 }
 
@@ -128,7 +125,6 @@ impl MouseHandler {
                 .args(["click", "--", "0x40"])
                 .spawn();
         }
-        self.handler_mouse_down = true;
     }
 
     pub fn mouse_up_delay(&mut self, button: i32, delay_ms: i64) {
@@ -150,7 +146,6 @@ impl MouseHandler {
                 },
             ));
         }
-        self.handler_mouse_down = false;
     }
 
     pub fn move_mouse_relative(&mut self, x_val: i32, y_val: i32) {
@@ -173,7 +168,6 @@ impl MouseHandler {
     fn cancel_timer_if_present(&mut self) {
         if self.guard.is_some() {
             self.guard = None;
-            self.handler_mouse_down = true;
         }
     }
 }

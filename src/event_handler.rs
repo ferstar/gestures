@@ -27,7 +27,7 @@ use nix::{
 use crate::config::Config;
 use crate::gestures::{hold::*, pinch::*, swipe::*, *};
 use crate::mouse_handler::MouseHandler;
-use crate::utils::exec_command_from_string;
+use crate::utils::{exec_command_from_string, exec_update_command_from_string};
 
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -35,6 +35,8 @@ use std::collections::HashMap;
 #[derive(Debug)]
 struct GestureCache {
     swipe_gestures: HashMap<i32, Vec<Gesture>>,
+    pinch_gestures: HashMap<i32, Vec<Gesture>>,
+    hold_gestures: HashMap<i32, Vec<Gesture>>,
     last_update: std::time::Instant,
 }
 
@@ -42,7 +44,9 @@ impl GestureCache {
     fn new() -> Self {
         Self {
             swipe_gestures: HashMap::new(),
-            last_update: std::time::Instant::now(),
+            pinch_gestures: HashMap::new(),
+            hold_gestures: HashMap::new(),
+            last_update: std::time::Instant::now() - std::time::Duration::from_secs(2),
         }
     }
 }
@@ -82,17 +86,20 @@ pub struct EventHandler {
 
 impl EventHandler {
     pub fn new(config: Arc<RwLock<Config>>) -> Self {
-        Self {
+        let mut handler = Self {
             config,
             event: Gesture::None,
             cache: GestureCache::new(),
             throttle: ThrottleState::new(60),
-        }
+        };
+        handler.update_cache();
+        handler
     }
 
     pub fn init(&mut self, input: &mut Libinput) -> Result<()> {
         log::debug!("{:?}  {:?}", &self, &input);
-        self.init_ctx(input).expect("Could not initialize libinput");
+        self.init_ctx(input)
+            .map_err(|_| miette!("Could not initialize libinput"))?;
         if self.has_gesture_device(input) {
             Ok(())
         } else {
@@ -134,7 +141,7 @@ impl EventHandler {
             }
 
             let mut fds = [PollFd::new(input.as_fd(), PollFlags::POLLIN)];
-            match poll(&mut fds, PollTimeout::try_from(100).unwrap()) {
+            match poll(&mut fds, PollTimeout::from(100u16)) {
                 Ok(_) => {
                     self.handle_event(input, mh)?;
                 }
@@ -149,7 +156,9 @@ impl EventHandler {
     }
 
     pub fn handle_event(&mut self, input: &mut Libinput, mh: &mut MouseHandler) -> Result<()> {
-        input.dispatch().unwrap();
+        input
+            .dispatch()
+            .map_err(|e| miette!("Failed to dispatch input events: {}", e))?;
         for event in input {
             if let Event::Gesture(e) = event {
                 match e {
@@ -164,6 +173,7 @@ impl EventHandler {
     }
 
     fn handle_hold_event(&mut self, event: GestureHoldEvent) -> Result<()> {
+        self.refresh_cache_if_needed();
         match event {
             GestureHoldEvent::Begin(e) => {
                 self.event = Gesture::Hold(Hold {
@@ -174,11 +184,11 @@ impl EventHandler {
             GestureHoldEvent::End(_e) => {
                 if let Gesture::Hold(s) = &self.event {
                     log::debug!("Hold: {:?}", &s.fingers);
-                    for i in &self.config.clone().read().gestures {
-                        if let Gesture::Hold(j) = i {
-                            if j.fingers == s.fingers {
+                    if let Some(gestures) = self.cache.hold_gestures.get(&s.fingers) {
+                        for gesture in gestures {
+                            if let Gesture::Hold(j) = gesture {
                                 exec_command_from_string(
-                                    &j.action.clone().unwrap_or_default(),
+                                    j.action.as_deref().unwrap_or(""),
                                     0.0,
                                     0.0,
                                     0.0,
@@ -195,6 +205,7 @@ impl EventHandler {
     }
 
     fn handle_pinch_event(&mut self, event: GesturePinchEvent) -> Result<()> {
+        self.refresh_cache_if_needed();
         match event {
             GesturePinchEvent::Begin(e) => {
                 self.event = Gesture::Pinch(Pinch {
@@ -205,18 +216,20 @@ impl EventHandler {
                     end: None,
                 });
                 if let Gesture::Pinch(s) = &self.event {
-                    for i in &self.config.clone().read().gestures {
-                        if let Gesture::Pinch(j) = i {
-                            if (j.direction == s.direction || j.direction == PinchDir::Any)
-                                && j.fingers == s.fingers
-                            {
-                                exec_command_from_string(
-                                    &j.start.clone().unwrap_or_default(),
-                                    0.0,
-                                    0.0,
-                                    0.0,
-                                    0.0,
-                                )?;
+                    if let Some(gestures) = self.cache.pinch_gestures.get(&s.fingers) {
+                        for gesture in gestures {
+                            if let Gesture::Pinch(j) = gesture {
+                                if (j.direction == s.direction || j.direction == PinchDir::Any)
+                                    && j.fingers == s.fingers
+                                {
+                                    exec_command_from_string(
+                                        j.start.as_deref().unwrap_or(""),
+                                        0.0,
+                                        0.0,
+                                        0.0,
+                                        0.0,
+                                    )?;
+                                }
                             }
                         }
                     }
@@ -227,6 +240,7 @@ impl EventHandler {
                 let delta_angle = e.angle_delta();
                 if let Gesture::Pinch(s) = &self.event {
                     let dir = PinchDir::dir(scale, delta_angle);
+                    let fingers = s.fingers;
                     log::debug!(
                         "Pinch: scale={:?} angle={:?} direction={:?} fingers={:?}",
                         &scale,
@@ -234,23 +248,23 @@ impl EventHandler {
                         &dir,
                         &s.fingers
                     );
-                    for i in &self.config.clone().read().gestures {
-                        if let Gesture::Pinch(j) = i {
-                            if (j.direction == dir || j.direction == PinchDir::Any)
-                                && j.fingers == s.fingers
-                            {
-                                exec_command_from_string(
-                                    &j.update.clone().unwrap_or_default(),
-                                    0.0,
-                                    0.0,
-                                    delta_angle,
-                                    scale,
-                                )?;
+                    if let Some(gestures) = self.cache.pinch_gestures.get(&fingers) {
+                        for gesture in gestures {
+                            if let Gesture::Pinch(j) = gesture {
+                                if j.direction == dir || j.direction == PinchDir::Any {
+                                    exec_update_command_from_string(
+                                        j.update.as_deref().unwrap_or(""),
+                                        0.0,
+                                        0.0,
+                                        delta_angle,
+                                        scale,
+                                    )?;
+                                }
                             }
                         }
                     }
                     self.event = Gesture::Pinch(Pinch {
-                        fingers: s.fingers,
+                        fingers,
                         direction: dir,
                         update: None,
                         start: None,
@@ -260,18 +274,20 @@ impl EventHandler {
             }
             GesturePinchEvent::End(_e) => {
                 if let Gesture::Pinch(s) = &self.event {
-                    for i in &self.config.clone().read().gestures {
-                        if let Gesture::Pinch(j) = i {
-                            if (j.direction == s.direction || j.direction == PinchDir::Any)
-                                && j.fingers == s.fingers
-                            {
-                                exec_command_from_string(
-                                    &j.end.clone().unwrap_or_default(),
-                                    0.0,
-                                    0.0,
-                                    0.0,
-                                    0.0,
-                                )?;
+                    if let Some(gestures) = self.cache.pinch_gestures.get(&s.fingers) {
+                        for gesture in gestures {
+                            if let Gesture::Pinch(j) = gesture {
+                                if (j.direction == s.direction || j.direction == PinchDir::Any)
+                                    && j.fingers == s.fingers
+                                {
+                                    exec_command_from_string(
+                                        j.end.as_deref().unwrap_or(""),
+                                        0.0,
+                                        0.0,
+                                        0.0,
+                                        0.0,
+                                    )?;
+                                }
                             }
                         }
                     }
@@ -304,18 +320,43 @@ impl EventHandler {
     fn update_cache(&mut self) {
         let config = self.config.read();
         let mut swipe_map: HashMap<i32, Vec<Gesture>> = HashMap::new();
+        let mut pinch_map: HashMap<i32, Vec<Gesture>> = HashMap::new();
+        let mut hold_map: HashMap<i32, Vec<Gesture>> = HashMap::new();
 
         for gesture in &config.gestures {
-            if let Gesture::Swipe(swipe) = gesture {
-                swipe_map
-                    .entry(swipe.fingers)
-                    .or_default()
-                    .push(gesture.clone());
+            match gesture {
+                Gesture::Swipe(swipe) => {
+                    swipe_map
+                        .entry(swipe.fingers)
+                        .or_default()
+                        .push(gesture.clone());
+                }
+                Gesture::Pinch(pinch) => {
+                    pinch_map
+                        .entry(pinch.fingers)
+                        .or_default()
+                        .push(gesture.clone());
+                }
+                Gesture::Hold(hold) => {
+                    hold_map
+                        .entry(hold.fingers)
+                        .or_default()
+                        .push(gesture.clone());
+                }
+                Gesture::None => {}
             }
         }
 
         self.cache.swipe_gestures = swipe_map;
+        self.cache.pinch_gestures = pinch_map;
+        self.cache.hold_gestures = hold_map;
         self.cache.last_update = std::time::Instant::now();
+    }
+
+    fn refresh_cache_if_needed(&mut self) {
+        if self.cache.last_update.elapsed() > std::time::Duration::from_secs(1) {
+            self.update_cache();
+        }
     }
 
     fn handle_matching_gesture<F>(
@@ -327,9 +368,7 @@ impl EventHandler {
     where
         F: Fn(&Gesture, &mut MouseHandler) -> Result<()>,
     {
-        if self.cache.last_update.elapsed() > std::time::Duration::from_secs(1) {
-            self.update_cache();
-        }
+        self.refresh_cache_if_needed();
 
         if let Gesture::Swipe(_) = &self.event {
             if let Some(gestures) = self.cache.swipe_gestures.get(&fingers) {
@@ -375,18 +414,29 @@ impl EventHandler {
 
         log::debug!("{:?} {:?}", &current_dir, &fingers);
 
-        let should_throttle_update = !self.throttle.should_update();
+        let is_throttled = !self.throttle.should_update();
 
         let current_dir = current_dir.clone();
         self.handle_matching_gesture(fingers, mh, move |gesture, mh| {
             if let Gesture::Swipe(j) = gesture {
                 if Self::is_direct_mouse_gesture(gesture) {
-                    let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
-                    mh.move_mouse_relative((dx * acceleration) as i32, (dy * acceleration) as i32);
+                    if !is_throttled {
+                        let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
+                        mh.move_mouse_relative(
+                            (dx * acceleration) as i32,
+                            (dy * acceleration) as i32,
+                        );
+                    }
                 } else if (j.direction == current_dir || j.direction == SwipeDir::Any)
-                    && !should_throttle_update
+                    && !is_throttled
                 {
-                    exec_command_from_string(j.update.as_deref().unwrap_or(""), dx, dy, 0.0, 0.0)?;
+                    exec_update_command_from_string(
+                        j.update.as_deref().unwrap_or(""),
+                        dx,
+                        dy,
+                        0.0,
+                        0.0,
+                    )?;
                 }
             }
             Ok(())
