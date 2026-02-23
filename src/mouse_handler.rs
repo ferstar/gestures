@@ -1,6 +1,7 @@
 use chrono::Duration;
 use libxdo::XDo;
 use std::env;
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc;
@@ -9,6 +10,10 @@ use std::thread;
 use std::time::Duration as StdDuration;
 use std::time::Instant;
 use timer::Timer;
+
+fn current_uid() -> Option<u32> {
+    std::fs::metadata("/proc/self").ok().map(|m| m.uid())
+}
 
 #[derive(Copy, Clone)]
 pub enum MouseCommand {
@@ -54,6 +59,15 @@ fn setup_x11_env() {
             let path = entry.path();
             if let Some(name) = path.file_name() {
                 if name.to_string_lossy().starts_with("xauth_") {
+                    let Ok(metadata) = entry.metadata() else {
+                        continue;
+                    };
+                    let Some(uid) = current_uid() else {
+                        continue;
+                    };
+                    if metadata.uid() != uid || !path.is_file() {
+                        continue;
+                    }
                     if let Some(path_str) = path.to_str() {
                         env::set_var("XAUTHORITY", path_str);
                         log::info!("Set XAUTHORITY to: {}", path_str);

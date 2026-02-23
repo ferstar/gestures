@@ -241,21 +241,21 @@ fn main() -> Result<()> {
         l.init();
     }
 
-    let config_path = app.conf.clone();
-    let c = Config::read_from_optional_path(config_path.as_deref()).unwrap_or_else(|e| {
-        log::error!(
-            "Could not read configuration file, using empty config: {}",
-            e
-        );
-        Config::default()
-    });
-    log::debug!("{:#?}", &c);
-
     match app.command {
         c @ Commands::Reload => {
             ipc_client::handle_command(c)?;
         }
         Commands::Start => {
+            let config_path = app.conf.clone();
+            let c = Config::read_from_optional_path(config_path.as_deref()).unwrap_or_else(|e| {
+                log::error!(
+                    "Could not read configuration file, using empty config: {}",
+                    e
+                );
+                Config::default()
+            });
+            log::debug!("{:#?}", &c);
+
             let is_wayland = if app.wayland {
                 log::info!("Forced Wayland mode via command line");
                 true

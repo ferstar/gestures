@@ -1,9 +1,11 @@
 use parking_lot::Mutex;
 use parking_lot::RwLock;
 use std::env;
+use std::fs;
 use std::io::{BufRead, BufReader};
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
@@ -13,26 +15,84 @@ use crate::config::Config;
 const IPC_WORKERS: usize = 4;
 const IPC_QUEUE_CAPACITY: usize = 128;
 
-pub fn create_socket(config: Arc<RwLock<Config>>, config_path: Option<std::path::PathBuf>) {
-    let socket_dir = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-    let socket_path = format!("{}/gestures.sock", socket_dir);
+fn current_uid() -> Option<u32> {
+    fs::metadata("/proc/self").ok().map(|m| m.uid())
+}
 
-    if Path::new(&socket_path).exists() {
-        std::fs::remove_file(&socket_path)
-            .map_err(|e| {
-                miette::miette!(
-                    "Could not remove existing socket file {}: {}",
-                    socket_path,
-                    e
-                )
-            })
-            .ok();
+fn resolve_socket_path() -> Option<PathBuf> {
+    if let Ok(socket_dir) = env::var("XDG_RUNTIME_DIR") {
+        return Some(PathBuf::from(socket_dir).join("gestures.sock"));
+    }
+
+    let uid = current_uid()?;
+    let fallback = PathBuf::from(format!("/run/user/{uid}"));
+    if fallback.is_dir() {
+        Some(fallback.join("gestures.sock"))
+    } else {
+        log::error!(
+            "XDG_RUNTIME_DIR is unset and fallback runtime dir {} is unavailable; IPC disabled",
+            fallback.display()
+        );
+        None
+    }
+}
+
+fn remove_stale_socket(socket_path: &Path) -> bool {
+    let metadata = match fs::symlink_metadata(socket_path) {
+        Ok(metadata) => metadata,
+        Err(e) => {
+            log::error!(
+                "Failed to inspect existing IPC path {}: {}",
+                socket_path.display(),
+                e
+            );
+            return false;
+        }
+    };
+
+    if !metadata.file_type().is_socket() {
+        log::error!(
+            "Refusing to remove non-socket path at {}",
+            socket_path.display()
+        );
+        return false;
+    }
+
+    if let Some(uid) = current_uid() {
+        if metadata.uid() != uid {
+            log::error!(
+                "Refusing to remove socket {} not owned by current user",
+                socket_path.display()
+            );
+            return false;
+        }
+    }
+
+    if let Err(e) = fs::remove_file(socket_path) {
+        log::error!(
+            "Could not remove existing socket file {}: {}",
+            socket_path.display(),
+            e
+        );
+        return false;
+    }
+
+    true
+}
+
+pub fn create_socket(config: Arc<RwLock<Config>>, config_path: Option<std::path::PathBuf>) {
+    let Some(socket_path) = resolve_socket_path() else {
+        return;
+    };
+
+    if socket_path.exists() && !remove_stale_socket(&socket_path) {
+        return;
     }
 
     let listener = match UnixListener::bind(&socket_path) {
         Ok(listener) => listener,
         Err(e) => {
-            log::error!("Failed to bind IPC socket {}: {}", socket_path, e);
+            log::error!("Failed to bind IPC socket {}: {}", socket_path.display(), e);
             return;
         }
     };
@@ -40,14 +100,14 @@ pub fn create_socket(config: Arc<RwLock<Config>>, config_path: Option<std::path:
     // Set non-blocking mode
     if let Err(e) = listener.set_nonblocking(true) {
         log::error!("Cannot set non-blocking IPC socket: {}", e);
-        let _ = std::fs::remove_file(&socket_path);
+        let _ = fs::remove_file(&socket_path);
         return;
     }
 
     // Cleanup socket on shutdown
     let socket_path_clone = socket_path.clone();
     let cleanup = move || {
-        let _ = std::fs::remove_file(&socket_path_clone);
+        let _ = fs::remove_file(&socket_path_clone);
     };
 
     let (tx, rx) = mpsc::sync_channel::<UnixStream>(IPC_QUEUE_CAPACITY);

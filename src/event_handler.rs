@@ -84,6 +84,26 @@ pub struct EventHandler {
     throttle: ThrottleState,
 }
 
+trait MouseActions {
+    fn mouse_down(&mut self, button: i32);
+    fn mouse_up_delay(&mut self, button: i32, delay_ms: i64);
+    fn move_mouse_relative(&mut self, x_val: i32, y_val: i32);
+}
+
+impl MouseActions for MouseHandler {
+    fn mouse_down(&mut self, button: i32) {
+        MouseHandler::mouse_down(self, button);
+    }
+
+    fn mouse_up_delay(&mut self, button: i32, delay_ms: i64) {
+        MouseHandler::mouse_up_delay(self, button, delay_ms);
+    }
+
+    fn move_mouse_relative(&mut self, x_val: i32, y_val: i32) {
+        MouseHandler::move_mouse_relative(self, x_val, y_val);
+    }
+}
+
 impl EventHandler {
     pub fn new(config: Arc<RwLock<Config>>) -> Self {
         let mut handler = Self {
@@ -301,16 +321,16 @@ impl EventHandler {
     fn handle_swipe_event(
         &mut self,
         event: GestureSwipeEvent,
-        mh: &mut MouseHandler,
+        mh: &mut impl MouseActions,
     ) -> Result<()> {
         match event {
             GestureSwipeEvent::Begin(e) => self.handle_swipe_begin(e.finger_count(), mh),
             GestureSwipeEvent::Update(e) => self.handle_swipe_update(e.dx(), e.dy(), mh),
             GestureSwipeEvent::End(e) => {
-                if !e.cancelled() {
-                    self.handle_swipe_end(mh)
+                if e.cancelled() {
+                    self.handle_swipe_cancel(mh)
                 } else {
-                    Ok(())
+                    self.handle_swipe_end(mh)
                 }
             }
             _ => Ok(()),
@@ -362,11 +382,11 @@ impl EventHandler {
     fn handle_matching_gesture<F>(
         &mut self,
         fingers: i32,
-        mh: &mut MouseHandler,
+        mh: &mut impl MouseActions,
         handler: F,
     ) -> Result<()>
     where
-        F: Fn(&Gesture, &mut MouseHandler) -> Result<()>,
+        F: Fn(&Gesture, &mut dyn MouseActions) -> Result<()>,
     {
         self.refresh_cache_if_needed();
 
@@ -388,7 +408,7 @@ impl EventHandler {
         }
     }
 
-    fn handle_swipe_begin(&mut self, fingers: i32, mh: &mut MouseHandler) -> Result<()> {
+    fn handle_swipe_begin(&mut self, fingers: i32, mh: &mut impl MouseActions) -> Result<()> {
         self.event = Gesture::Swipe(Swipe::new(fingers));
 
         self.handle_matching_gesture(fingers, mh, |gesture, mh| {
@@ -404,7 +424,7 @@ impl EventHandler {
         })
     }
 
-    fn handle_swipe_update(&mut self, dx: f64, dy: f64, mh: &mut MouseHandler) -> Result<()> {
+    fn handle_swipe_update(&mut self, dx: f64, dy: f64, mh: &mut impl MouseActions) -> Result<()> {
         let swipe_dir = SwipeDir::dir(dx, dy);
         let (fingers, current_dir) = if let Gesture::Swipe(s) = &self.event {
             (s.fingers, swipe_dir.clone())
@@ -446,7 +466,7 @@ impl EventHandler {
         Ok(())
     }
 
-    fn handle_swipe_end(&mut self, mh: &mut MouseHandler) -> Result<()> {
+    fn handle_swipe_end(&mut self, mh: &mut impl MouseActions) -> Result<()> {
         let (fingers, direction) = if let Gesture::Swipe(s) = &self.event {
             (s.fingers, s.direction.clone())
         } else {
@@ -462,7 +482,26 @@ impl EventHandler {
                 }
             }
             Ok(())
-        })
+        })?;
+        self.event = Gesture::None;
+        Ok(())
+    }
+
+    fn handle_swipe_cancel(&mut self, mh: &mut impl MouseActions) -> Result<()> {
+        let fingers = if let Gesture::Swipe(s) = &self.event {
+            s.fingers
+        } else {
+            return Ok(());
+        };
+
+        self.handle_matching_gesture(fingers, mh, |gesture, mh| {
+            if Self::is_direct_mouse_gesture(gesture) {
+                mh.mouse_up_delay(1, 0);
+            }
+            Ok(())
+        })?;
+        self.event = Gesture::None;
+        Ok(())
     }
 }
 
@@ -510,5 +549,58 @@ impl LibinputInterface for Interface {
     #[inline]
     fn close_restricted(&mut self, fd: OwnedFd) {
         drop(fd);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    struct MockMouseHandler {
+        mouse_up_calls: Vec<(i32, i64)>,
+    }
+
+    impl MockMouseHandler {
+        fn new() -> Self {
+            Self {
+                mouse_up_calls: Vec::new(),
+            }
+        }
+    }
+
+    impl MouseActions for MockMouseHandler {
+        fn mouse_down(&mut self, _button: i32) {}
+
+        fn mouse_up_delay(&mut self, button: i32, delay_ms: i64) {
+            self.mouse_up_calls.push((button, delay_ms));
+        }
+
+        fn move_mouse_relative(&mut self, _x_val: i32, _y_val: i32) {}
+    }
+
+    #[test]
+    fn cancelled_swipe_releases_direct_mouse_drag() {
+        let config = Config {
+            gestures: vec![Gesture::Swipe(Swipe {
+                direction: SwipeDir::Any,
+                fingers: 3,
+                update: None,
+                start: None,
+                end: None,
+                acceleration: Some(20),
+                mouse_up_delay: Some(500),
+            })],
+        };
+        let mut handler = EventHandler::new(Arc::new(RwLock::new(config)));
+        handler.event = Gesture::Swipe(Swipe::new(3));
+
+        let mut mock_mouse = MockMouseHandler::new();
+        handler
+            .handle_swipe_cancel(&mut mock_mouse)
+            .expect("cancelled swipe should be handled");
+
+        assert_eq!(mock_mouse.mouse_up_calls, vec![(1, 0)]);
+        assert_eq!(handler.event, Gesture::None);
     }
 }
