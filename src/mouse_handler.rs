@@ -7,6 +7,7 @@ use std::sync::mpsc;
 use std::sync::mpsc::TrySendError;
 use std::thread;
 use std::time::Duration as StdDuration;
+use std::time::Instant;
 use timer::Timer;
 
 #[derive(Copy, Clone)]
@@ -20,6 +21,8 @@ pub struct MouseHandler {
     tx: Option<mpsc::SyncSender<(MouseCommand, i32, i32)>>,
     timer: Timer,
     guard: Option<timer::Guard>,
+    dropped_move_events: u64,
+    last_drop_report: Instant,
 }
 
 /// Try to setup X11 environment variables by detecting XAUTHORITY file
@@ -87,6 +90,8 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
                 let _ = ready_tx.send(Ok(()));
                 log::info!("Successfully initialized libxdo for X11");
                 let mut pending: Option<(MouseCommand, i32, i32)> = None;
+                let mut coalesced_move_events: u64 = 0;
+                let mut last_coalesce_report = Instant::now();
                 loop {
                     let (command, mut param1, mut param2) = if let Some(cmd) = pending.take() {
                         cmd
@@ -103,6 +108,7 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
                                 MouseCommand::MoveMouseRelative => {
                                     param1 = param1.saturating_add(next_p1);
                                     param2 = param2.saturating_add(next_p2);
+                                    coalesced_move_events = coalesced_move_events.saturating_add(1);
                                 }
                                 _ => {
                                     pending = Some((next_cmd, next_p1, next_p2));
@@ -117,6 +123,18 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
                         MouseCommand::MouseUp => xdo.mouse_up(param1),
                         MouseCommand::MoveMouseRelative => xdo.move_mouse_relative(param1, param2),
                     };
+
+                    if log::log_enabled!(log::Level::Debug)
+                        && coalesced_move_events > 0
+                        && last_coalesce_report.elapsed() >= StdDuration::from_secs(10)
+                    {
+                        log::debug!(
+                            "x11 move queue stats: coalesced_move_events={}",
+                            coalesced_move_events
+                        );
+                        coalesced_move_events = 0;
+                        last_coalesce_report = Instant::now();
+                    }
                 }
             }
             Err(e) => {
@@ -146,6 +164,8 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
         tx,
         timer: Timer::new(),
         guard: None,
+        dropped_move_events: 0,
+        last_drop_report: Instant::now(),
     }
 }
 
@@ -191,7 +211,10 @@ impl MouseHandler {
         if let Some(ref tx) = self.tx {
             match tx.try_send((MouseCommand::MoveMouseRelative, x_val, y_val)) {
                 Ok(()) => {}
-                Err(TrySendError::Full(_)) => {}
+                Err(TrySendError::Full(_)) => {
+                    self.dropped_move_events = self.dropped_move_events.saturating_add(1);
+                    self.maybe_report_drop_stats();
+                }
                 Err(TrySendError::Disconnected(_)) => {
                     log::warn!("Mouse worker disconnected, dropping move event");
                 }
@@ -212,6 +235,20 @@ impl MouseHandler {
     fn cancel_timer_if_present(&mut self) {
         if self.guard.is_some() {
             self.guard = None;
+        }
+    }
+
+    fn maybe_report_drop_stats(&mut self) {
+        if !log::log_enabled!(log::Level::Debug) || self.dropped_move_events == 0 {
+            return;
+        }
+        if self.last_drop_report.elapsed() >= StdDuration::from_secs(10) {
+            log::debug!(
+                "x11 move queue stats: dropped_move_events={}",
+                self.dropped_move_events
+            );
+            self.dropped_move_events = 0;
+            self.last_drop_report = Instant::now();
         }
     }
 }
