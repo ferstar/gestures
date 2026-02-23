@@ -145,6 +145,27 @@ This fork includes several performance improvements:
 - Ensure `ydotoold` daemon is running: `systemctl --user status ydotoold`
 - Configure uinput permissions (see [issue #4](https://github.com/ferstar/gestures/issues/4))
 
+### `libxdo` Shared Library Error on X11
+Symptom:
+- `journalctl --user -u gestures` shows:
+  - `error while loading shared libraries: libxdo.so.3: cannot open shared object file`
+
+Cause:
+- System `xdotool/libxdo` was upgraded (for example to `libxdo.so.4`), but your existing `gestures` binary was built against an older SONAME (`libxdo.so.3`).
+
+Fix:
+```bash
+# Rebuild and reinstall gestures binary
+cargo install --path . --force
+
+# Restart user service
+systemctl --user restart gestures
+
+# Verify runtime link and logs
+ldd ~/.cargo/bin/gestures | grep libxdo
+journalctl --user -u gestures -n 50 --no-pager
+```
+
 ### Conflicts with DE Gestures
 Disable built-in gestures in your desktop environment (GNOME, KDE, etc.)
 
