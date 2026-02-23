@@ -1,3 +1,4 @@
+use miette::Result;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
 use std::env;
@@ -19,89 +20,88 @@ fn current_uid() -> Option<u32> {
     fs::metadata("/proc/self").ok().map(|m| m.uid())
 }
 
-fn resolve_socket_path() -> Option<PathBuf> {
+fn resolve_socket_path() -> Result<PathBuf> {
     if let Ok(socket_dir) = env::var("XDG_RUNTIME_DIR") {
-        return Some(PathBuf::from(socket_dir).join("gestures.sock"));
+        return Ok(PathBuf::from(socket_dir).join("gestures.sock"));
     }
 
-    let uid = current_uid()?;
+    let uid = current_uid()
+        .ok_or_else(|| miette::miette!("Cannot determine current uid from /proc/self"))?;
     let fallback = PathBuf::from(format!("/run/user/{uid}"));
     if fallback.is_dir() {
-        Some(fallback.join("gestures.sock"))
+        Ok(fallback.join("gestures.sock"))
     } else {
-        log::error!(
-            "XDG_RUNTIME_DIR is unset and fallback runtime dir {} is unavailable; IPC disabled",
+        Err(miette::miette!(
+            "XDG_RUNTIME_DIR is unset and fallback runtime dir {} is unavailable",
             fallback.display()
-        );
-        None
+        ))
     }
 }
 
-fn remove_stale_socket(socket_path: &Path) -> bool {
+fn remove_stale_socket(socket_path: &Path) -> Result<()> {
     let metadata = match fs::symlink_metadata(socket_path) {
         Ok(metadata) => metadata,
         Err(e) => {
-            log::error!(
+            return Err(miette::miette!(
                 "Failed to inspect existing IPC path {}: {}",
                 socket_path.display(),
                 e
-            );
-            return false;
+            ));
         }
     };
 
     if !metadata.file_type().is_socket() {
-        log::error!(
+        return Err(miette::miette!(
             "Refusing to remove non-socket path at {}",
             socket_path.display()
-        );
-        return false;
+        ));
     }
 
     if let Some(uid) = current_uid() {
         if metadata.uid() != uid {
-            log::error!(
+            return Err(miette::miette!(
                 "Refusing to remove socket {} not owned by current user",
                 socket_path.display()
-            );
-            return false;
+            ));
         }
     }
 
     if let Err(e) = fs::remove_file(socket_path) {
-        log::error!(
+        return Err(miette::miette!(
             "Could not remove existing socket file {}: {}",
             socket_path.display(),
             e
-        );
-        return false;
+        ));
     }
 
-    true
+    Ok(())
 }
 
-pub fn create_socket(config: Arc<RwLock<Config>>, config_path: Option<std::path::PathBuf>) {
-    let Some(socket_path) = resolve_socket_path() else {
-        return;
-    };
+pub fn create_socket(
+    config: Arc<RwLock<Config>>,
+    config_path: Option<std::path::PathBuf>,
+) -> Result<()> {
+    let socket_path = resolve_socket_path()?;
 
-    if socket_path.exists() && !remove_stale_socket(&socket_path) {
-        return;
+    if socket_path.exists() {
+        remove_stale_socket(&socket_path)?;
     }
 
     let listener = match UnixListener::bind(&socket_path) {
         Ok(listener) => listener,
         Err(e) => {
-            log::error!("Failed to bind IPC socket {}: {}", socket_path.display(), e);
-            return;
+            return Err(miette::miette!(
+                "Failed to bind IPC socket {}: {}",
+                socket_path.display(),
+                e
+            ));
         }
     };
 
     // Set non-blocking mode
     if let Err(e) = listener.set_nonblocking(true) {
-        log::error!("Cannot set non-blocking IPC socket: {}", e);
         let _ = fs::remove_file(&socket_path);
-        return;
+        return Err(miette::miette!("Cannot set non-blocking IPC socket: {}", e));
     }
 
     // Cleanup socket on shutdown
@@ -151,11 +151,12 @@ pub fn create_socket(config: Arc<RwLock<Config>>, config_path: Option<std::path:
                 thread::sleep(Duration::from_millis(100));
             }
             Err(e) => {
-                eprintln!("Got error while handling IPC connection: {e}");
-                break;
+                return Err(miette::miette!("IPC listener accept failed: {}", e));
             }
         }
     }
+
+    Ok(())
 }
 
 fn handle_connection(

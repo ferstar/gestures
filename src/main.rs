@@ -289,7 +289,11 @@ fn run_eh(
     is_wayland: bool,
 ) -> Result<()> {
     let eh_thread = spawn_event_handler(config.clone(), is_wayland);
-    ipc::create_socket(config, config_path);
+    if let Err(e) = ipc::create_socket(config, config_path) {
+        SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _ = eh_thread.join();
+        return Err(e);
+    }
 
     let thread_result = eh_thread
         .join()

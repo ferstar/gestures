@@ -12,24 +12,26 @@ fn current_uid() -> Option<u32> {
     std::fs::metadata("/proc/self").ok().map(|m| m.uid())
 }
 
-fn socket_path() -> Option<PathBuf> {
+fn socket_path() -> Result<PathBuf> {
     if let Ok(socket_dir) = env::var("XDG_RUNTIME_DIR") {
-        return Some(PathBuf::from(socket_dir).join("gestures.sock"));
+        return Ok(PathBuf::from(socket_dir).join("gestures.sock"));
     }
 
-    let uid = current_uid()?;
+    let uid = current_uid()
+        .ok_or_else(|| miette::miette!("Cannot determine current uid from /proc/self"))?;
     let fallback = PathBuf::from(format!("/run/user/{uid}"));
     if fallback.is_dir() {
-        Some(fallback.join("gestures.sock"))
+        Ok(fallback.join("gestures.sock"))
     } else {
-        None
+        Err(miette::miette!(
+            "Could not determine IPC socket path: XDG_RUNTIME_DIR is unset and fallback runtime dir {} is unavailable",
+            fallback.display()
+        ))
     }
 }
 
 pub fn handle_command(cmd: Commands) -> Result<()> {
-    let socket_path = socket_path().ok_or_else(|| {
-        miette::miette!("Could not determine IPC runtime directory (XDG_RUNTIME_DIR is unset)")
-    })?;
+    let socket_path = socket_path()?;
 
     let mut stream = UnixStream::connect(&socket_path).map_err(|e| {
         miette::miette!(
