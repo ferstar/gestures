@@ -4,7 +4,9 @@ use std::env;
 use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc;
+use std::sync::mpsc::TrySendError;
 use std::thread;
+use std::time::Duration as StdDuration;
 use timer::Timer;
 
 #[derive(Copy, Clone)]
@@ -15,7 +17,7 @@ pub enum MouseCommand {
 }
 
 pub struct MouseHandler {
-    tx: Option<mpsc::Sender<(MouseCommand, i32, i32)>>,
+    tx: Option<mpsc::SyncSender<(MouseCommand, i32, i32)>>,
     timer: Timer,
     guard: Option<timer::Guard>,
 }
@@ -76,33 +78,40 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
         // Setup X11 environment before initializing XDo
         setup_x11_env();
 
-        // Probe X11 availability before creating the worker thread.
-        // `XDo` is not `Send`, so it must be created inside the worker thread.
-        if let Err(e) = XDo::new(None) {
-            log::error!("Failed to initialize libxdo: {:?}", e);
-            log::warn!("Falling back to ydotool mouse control mode");
-            log::warn!("Check DISPLAY/XAUTHORITY if X11 mode was intended");
-            None
-        } else {
-            let (tx, rx) = mpsc::channel();
-            thread::spawn(move || match XDo::new(None) {
-                Ok(xdo) => {
-                    log::info!("Successfully initialized libxdo for X11");
-                    while let Ok((command, param1, param2)) = rx.recv() {
-                        let _ = match command {
-                            MouseCommand::MouseDown => xdo.mouse_down(param1),
-                            MouseCommand::MouseUp => xdo.mouse_up(param1),
-                            MouseCommand::MoveMouseRelative => {
-                                xdo.move_mouse_relative(param1, param2)
-                            }
-                        };
-                    }
+        const MOUSE_EVENT_QUEUE_SIZE: usize = 64;
+        let (tx, rx) = mpsc::sync_channel(MOUSE_EVENT_QUEUE_SIZE);
+        let (ready_tx, ready_rx) = mpsc::channel();
+
+        thread::spawn(move || match XDo::new(None) {
+            Ok(xdo) => {
+                let _ = ready_tx.send(Ok(()));
+                log::info!("Successfully initialized libxdo for X11");
+                while let Ok((command, param1, param2)) = rx.recv() {
+                    let _ = match command {
+                        MouseCommand::MouseDown => xdo.mouse_down(param1),
+                        MouseCommand::MouseUp => xdo.mouse_up(param1),
+                        MouseCommand::MoveMouseRelative => xdo.move_mouse_relative(param1, param2),
+                    };
                 }
-                Err(e) => {
-                    log::error!("Failed to initialize libxdo in worker thread: {:?}", e);
-                }
-            });
-            Some(tx)
+            }
+            Err(e) => {
+                let _ = ready_tx.send(Err(e));
+            }
+        });
+
+        match ready_rx.recv_timeout(StdDuration::from_secs(2)) {
+            Ok(Ok(())) => Some(tx),
+            Ok(Err(e)) => {
+                log::error!("Failed to initialize libxdo: {:?}", e);
+                log::warn!("Falling back to ydotool mouse control mode");
+                log::warn!("Check DISPLAY/XAUTHORITY if X11 mode was intended");
+                None
+            }
+            Err(e) => {
+                log::error!("Timed out waiting for libxdo initialization: {:?}", e);
+                log::warn!("Falling back to ydotool mouse control mode");
+                None
+            }
         }
     } else {
         None
@@ -149,9 +158,19 @@ impl MouseHandler {
     }
 
     pub fn move_mouse_relative(&mut self, x_val: i32, y_val: i32) {
+        if x_val == 0 && y_val == 0 {
+            return;
+        }
+
         self.cancel_timer_if_present();
         if let Some(ref tx) = self.tx {
-            let _ = tx.send((MouseCommand::MoveMouseRelative, x_val, y_val));
+            match tx.try_send((MouseCommand::MoveMouseRelative, x_val, y_val)) {
+                Ok(()) => {}
+                Err(TrySendError::Full(_)) => {}
+                Err(TrySendError::Disconnected(_)) => {
+                    log::warn!("Mouse worker disconnected, dropping move event");
+                }
+            }
         } else {
             let _ = Command::new("ydotool")
                 .args([
