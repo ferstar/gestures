@@ -86,7 +86,32 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
             Ok(xdo) => {
                 let _ = ready_tx.send(Ok(()));
                 log::info!("Successfully initialized libxdo for X11");
-                while let Ok((command, param1, param2)) = rx.recv() {
+                let mut pending: Option<(MouseCommand, i32, i32)> = None;
+                loop {
+                    let (command, mut param1, mut param2) = if let Some(cmd) = pending.take() {
+                        cmd
+                    } else {
+                        match rx.recv() {
+                            Ok(cmd) => cmd,
+                            Err(_) => break,
+                        }
+                    };
+
+                    if matches!(command, MouseCommand::MoveMouseRelative) {
+                        while let Ok((next_cmd, next_p1, next_p2)) = rx.try_recv() {
+                            match next_cmd {
+                                MouseCommand::MoveMouseRelative => {
+                                    param1 = param1.saturating_add(next_p1);
+                                    param2 = param2.saturating_add(next_p2);
+                                }
+                                _ => {
+                                    pending = Some((next_cmd, next_p1, next_p2));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     let _ = match command {
                         MouseCommand::MouseDown => xdo.mouse_down(param1),
                         MouseCommand::MouseUp => xdo.mouse_up(param1),
