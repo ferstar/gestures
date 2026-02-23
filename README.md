@@ -145,6 +145,31 @@ This fork includes several performance improvements:
 - Ensure `ydotoold` daemon is running: `systemctl --user status ydotoold`
 - Configure uinput permissions (see [issue #4](https://github.com/ferstar/gestures/issues/4))
 
+### Wayland Permission Denied (trackpad or ydotool socket)
+Symptoms:
+- Gestures cannot read touchpad events
+- Or logs contain ydotool socket permission/path errors
+
+Checks and fixes:
+```bash
+# 1) Ensure current user is in input-related group (distro-dependent)
+id -nG
+sudo usermod -aG input $USER
+
+# 2) Re-login so new group membership takes effect
+
+# 3) Run ydotoold as user service (not system/root service)
+systemctl --user enable --now ydotoold.service
+systemctl --user status ydotoold.service
+
+# 4) Verify socket exists in user runtime dir
+ls -la "$XDG_RUNTIME_DIR/.ydotool_socket"
+```
+
+Notes:
+- Avoid `chmod 777` on the socket as a long-term fix.
+- Keep `gestures` and `ydotoold` in the same user session to avoid permission mismatch.
+
 ### `libxdo` Shared Library Error on X11
 Symptom:
 - `journalctl --user -u gestures` shows:
