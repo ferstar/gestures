@@ -1,0 +1,6 @@
+{
+  "name": "Gestures Panel",
+  "identifier": "dev.gestures.panel",
+  "version": "0.1.0",
+  "out": "build"
+}

@@ -1,0 +1,8 @@
+github.com/ebitengine/purego v0.11.1 h1:MV/2zHmBTVSJWaZP8Qyew4fKrlYR1CvyRgRXcQgY1sI=
+github.com/ebitengine/purego v0.11.1/go.mod h1:bi7jKkWbuXT1fOkExPRuICf0fTm6r95zyQ2eoMTxdhE=
+github.com/egoist/mygo v0.2.16 h1:xY5bNXDBnaHTjDQmXa2Hwr8E5kO9+Y0FmTPw7ZYqTzc=
+github.com/egoist/mygo v0.2.16/go.mod h1:b6X/Y1Z3F62j9aU0V7G0RqEw5kZjOh2vY9GK0QYebiU=
+github.com/go-text/typesetting v0.3.5 h1:R/Tx050KxBdiwD4S6X1gJ0cr449hyRQuM/R7j8bLE4c=
+github.com/go-text/typesetting v0.3.5/go.mod h1:KvGeM9MVIf5nIrjT7RdQLKOrBp8AWHJyg+tbnrPxRmk=
+golang.org/x/image v0.46.0 h1:xmxzmkAkM7G2/uN8K6oMxwPpdvlMjL9Ez44Q5cAaAB4=
+golang.org/x/image v0.46.0/go.mod h1:MC9WsQ9zWBwb2f+z8oyfCBp4lTHPC7aMRdD+6M7XpXI=

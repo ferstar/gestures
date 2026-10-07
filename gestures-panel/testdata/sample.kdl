@@ -1,0 +1,16 @@
+// Gestures Configuration
+// See https://github.com/ferstar/gestures for full documentation
+
+// name: 3-finger drag
+swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
+
+// name: workspace-left
+swipe direction="w" fingers=4 end="hyprctl dispatch workspace e-1"
+
+// name: workspace-right
+swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
+
+pinch direction="in" fingers=2 end="xdotool key ctrl+minus"
+pinch direction="out" fingers=2 end="xdotool key ctrl+plus"
+
+hold fingers=4 action="rofi -show drun"
