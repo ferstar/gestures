@@ -6,13 +6,23 @@
 >
 > Pre-compiled binaries: https://github.com/ferstar/gestures/releases
 >
-> Install via cargo: `cargo install --git https://github.com/ferstar/gestures.git`
+> Install via cargo: `cargo install --git https://github.com/ferstar/gestures.git --locked`
 
 ## About
+
 A libinput-based touchpad gesture handler that executes commands based on gestures.
 Unlike alternatives, it uses the libinput API directly for better performance and reliability.
 
+This repository is a monorepo:
+
+| Path | Description |
+|------|-------------|
+| [`crates/gestures`](./crates/gestures) | Rust engine (libinput daemon, IPC, config) |
+| [`apps/panel`](./apps/panel) | MyGo native-UI control panel (edit KDL + systemd) |
+| [`docs/`](./docs) | Configuration reference and docs |
+
 ## Features
+
 - **Platform Support**: Both X11 and Wayland
 - **High Performance**:
   - X11: Direct libxdo API for minimal latency
@@ -23,11 +33,14 @@ Unlike alternatives, it uses the libinput API directly for better performance an
   - Mouse acceleration and delay for smooth 3-finger dragging
   - Real-time config reload via IPC
   - Graceful shutdown (SIGTERM/SIGINT)
+- **Control panel**: optional GUI in `apps/panel` to edit gestures and manage the user service
 
 ## Configuration
-See [config.md](./config.md) for detailed configuration instructions.
+
+See [docs/config.md](./docs/config.md) for detailed configuration instructions.
 
 ### Quick Setup
+
 ```bash
 # Generate default config file
 gestures generate-config
@@ -40,6 +53,7 @@ gestures generate-config --force
 ```
 
 ### Quick Example
+
 ```kdl
 // 3-finger drag (works on both X11 and Wayland)
 swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
@@ -49,33 +63,58 @@ swipe direction="w" fingers=4 end="hyprctl dispatch workspace e-1"
 swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
 ```
 
-## Installation
+## Build
 
 ### Prerequisites
+
 **System packages:**
+
 - `libudev-dev` / `libudev-devel`
 - `libinput-dev` / `libinput-devel`
 - `libxdo-dev` / `libxdo-devel`
 
 **Runtime dependencies:**
+
 - X11: No extra runtime dependency for drag (uses `libxdo` directly)
 - Wayland: `ydotool` + `ydotoold` daemon (for 3-finger drag)
   - If your distribution package has issues, try the official [ydotool binaries from GitHub releases](https://github.com/ReimuNotMoe/ydotool/releases)
 
-### With Cargo
-```bash
-cargo install --git https://github.com/ferstar/gestures.git
-```
+### Rust engine (`crates/gestures`)
 
-### Manual Build
+Cargo workspace root is the repo root (`Cargo.toml` members = `crates/gestures`).
+
 ```bash
-git clone https://github.com/ferstar/gestures
-cd gestures
+# From repo root
 cargo build --release
+# or from the crate:
+cargo build --release --manifest-path crates/gestures/Cargo.toml
+
 sudo cp target/release/gestures /usr/local/bin/
 ```
 
+Install from git:
+
+```bash
+cargo install --git https://github.com/ferstar/gestures.git --locked
+# or from a local checkout:
+cargo install --path crates/gestures --force
+```
+
+### Control panel (`apps/panel`)
+
+Requires Go 1.27+.
+
+```bash
+cd apps/panel
+go build -o gestures-panel .
+# or: go tool mygo build
+./gestures-panel
+```
+
+See [apps/panel/README.md](./apps/panel/README.md) for details.
+
 ### Nix Flakes
+
 ```nix
 # flake.nix
 {
@@ -89,6 +128,7 @@ sudo cp target/release/gestures /usr/local/bin/
 ## Running
 
 ### Systemd (Recommended)
+
 ```bash
 # 1. Generate config file (first time only)
 gestures generate-config
@@ -101,6 +141,7 @@ systemctl --user enable --now gestures.service
 ```
 
 ### Manual
+
 ```bash
 # Auto-detect display server (X11 or Wayland)
 gestures start
@@ -133,24 +174,31 @@ This fork includes several performance improvements:
 ## Troubleshooting
 
 ### High CPU on Wayland
+
 - Default 60 FPS throttle should keep CPU <5%
-- Adjust in `src/event_handler.rs` (`ThrottleState::new(60)`) if needed
+- Adjust in `crates/gestures/src/event_handler.rs` (`ThrottleState::new(60)`) if needed
 
 ### 3-Finger Drag Not Working
+
 **X11:**
+
 - Ensure X11 session env is correct (`DISPLAY` / `XAUTHORITY`)
 
 **Wayland:**
+
 - If your distribution package has issues, try the official [ydotool binaries from GitHub releases](https://github.com/ReimuNotMoe/ydotool/releases)
 - Ensure `ydotoold` daemon is running: `systemctl --user status ydotoold`
 - Configure uinput permissions (see [issue #4](https://github.com/ferstar/gestures/issues/4))
 
 ### Wayland Permission Denied (trackpad or ydotool socket)
+
 Symptoms:
+
 - Gestures cannot read touchpad events
 - Or logs contain ydotool socket permission/path errors
 
 Checks and fixes:
+
 ```bash
 # 1) Ensure current user is in input-related group (distro-dependent)
 id -nG
@@ -167,21 +215,26 @@ ls -la "$XDG_RUNTIME_DIR/.ydotool_socket"
 ```
 
 Notes:
+
 - Avoid `chmod 777` on the socket as a long-term fix.
 - Keep `gestures` and `ydotoold` in the same user session to avoid permission mismatch.
 
 ### `libxdo` Shared Library Error on X11
+
 Symptom:
+
 - `journalctl --user -u gestures` shows:
   - `error while loading shared libraries: libxdo.so.3: cannot open shared object file`
 
 Cause:
+
 - System `xdotool/libxdo` was upgraded (for example to `libxdo.so.4`), but your existing `gestures` binary was built against an older SONAME (`libxdo.so.3`).
 
 Fix:
+
 ```bash
 # Rebuild and reinstall gestures binary
-cargo install --path . --force
+cargo install --path crates/gestures --force
 
 # Restart user service
 systemctl --user restart gestures
@@ -192,9 +245,11 @@ journalctl --user -u gestures -n 50 --no-pager
 ```
 
 ### Conflicts with DE Gestures
+
 Disable built-in gestures in your desktop environment (GNOME, KDE, etc.)
 
 ## Alternatives
+
 - [libinput-gestures](https://github.com/bulletmark/libinput-gestures) - Parses debug output
 - [gebaar](https://github.com/Coffee2CodeNL/gebaar-libinput) - Swipe only
 - [fusuma](https://github.com/iberianpig/fusuma) - Ruby-based

@@ -39,6 +39,7 @@
           ${name} = craneLib.buildPackage {
             pname = name;
             src = craneLib.cleanCargoSource ./.;
+            cargoExtraArgs = "-p gestures";
 
             inherit buildInputs nativeBuildInputs;
 

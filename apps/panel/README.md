@@ -4,6 +4,8 @@ MyGo native-UI control panel for [ferstar/gestures](https://github.com/ferstar/g
 
 This app does **not** rewrite the Rust engine. It edits the on-disk **KDL** config the daemon already uses, and starts/stops/reloads the `gestures.service` user systemd unit.
 
+Lives at `apps/panel` in the monorepo (Rust engine: `crates/gestures`).
+
 ## Requirements
 
 - Go **1.27+** (MyGo native UI)
@@ -14,7 +16,7 @@ This app does **not** rewrite the Rust engine. It edits the on-disk **KDL** conf
 ## Build
 
 ```bash
-cd gestures-panel
+cd apps/panel
 go build -o gestures-panel .
 # or:
 go tool mygo build
@@ -60,7 +62,7 @@ Optional UI names are stored as `// name: …` comments above nodes.
 ## Layout
 
 ```
-gestures-panel/
+apps/panel/
   main.go                 # window + tray
   internal/model/         # gesture types
   internal/kdl/           # parse/format gestures.kdl

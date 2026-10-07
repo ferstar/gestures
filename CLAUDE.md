@@ -16,10 +16,12 @@ A high-performance libinput-based touchpad gesture handler focused on optimizing
 
 ## Build and Test
 
+Monorepo layout: Rust engine in `crates/gestures`, MyGo panel in `apps/panel`. Workspace root `Cargo.toml` members = `["crates/gestures"]`.
+
 ### Development Commands
 
 ```bash
-# Build project (release version)
+# Build engine (from repo root)
 cargo build --release
 
 # Run tests
@@ -29,12 +31,15 @@ cargo test
 cargo test <test_name>
 
 # Run with verbose logging
-cargo run -- -vv start
+cargo run -p gestures -- -vv start
 
 # Lint and format checking
 cargo fmt --all -- --check          # Check code formatting
 cargo fmt --all                     # Auto-format code
 cargo clippy --all-targets --all-features -- -D warnings  # Run clippy with warnings as errors
+
+# Control panel
+cd apps/panel && go build -o gestures-panel . && go test ./...
 
 # Using Nix (if available)
 nix build
@@ -59,7 +64,7 @@ nix develop
 ### Module Structure
 
 ```
-src/
+crates/gestures/src/
 ├── main.rs              # Entry point: CLI parsing, signal handling, display server detection
 ├── event_handler.rs     # Core event handler: libinput event loop, gesture recognition
 ├── mouse_handler.rs     # Mouse control abstraction: X11 (libxdo) vs Wayland (ydotool)
@@ -131,8 +136,8 @@ Main handler functions in `event_handler.rs`:
 
 ### Adding New Gesture Types
 
-1. Add new variant to `Gesture` enum in `src/gestures/mod.rs`
-2. Create new module file in `src/gestures/`
+1. Add new variant to `Gesture` enum in `crates/gestures/src/gestures/mod.rs`
+2. Create new module file in `crates/gestures/src/gestures/`
 3. Add handling branch in `handle_event()` in `event_handler.rs`
 4. Update KDL parsing in `config.rs` (via Decode trait)
 
@@ -182,7 +187,7 @@ journalctl --user -u gestures -f
 
 ## Testing Strategy
 
-- Unit tests located in `src/tests/mod.rs`
+- Unit tests located in `crates/gestures/src/tests/mod.rs`
 - Integration tests require touchpad device, typically manual testing
 - Recommended manual testing workflow after modifying gesture logic:
   1. Generate config: `gestures generate-config`

@@ -5,3 +5,8 @@
 
 # Local test scripts with personal configuration
 test-build-local.sh
+
+# Go panel build output
+/apps/panel/build/
+/apps/panel/gestures-panel
+*.exe
