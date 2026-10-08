@@ -227,11 +227,13 @@ func (a *App) editModal(c *ui.Context) {
 				})
 
 				if a.EditKindStr == string(model.KindSwipe) {
+					// mode is derived from a.EditMode; since mygo 0.3 bound input is
+					// applied after the build, so commit the edit in OnChange.
 					mode := string(a.EditMode)
 					ui.Field(c, "Action type", func() {
-						ui.Select(c, &mode, []string{string(model.ModeDrag), string(model.ModeExec)})
+						ui.Select(c, &mode, []string{string(model.ModeDrag), string(model.ModeExec)}).
+							OnChange(func() { a.EditMode = model.ActionMode(mode) })
 					})
-					a.EditMode = model.ActionMode(mode)
 
 					if a.EditMode == model.ModeDrag {
 						ui.Field(c, "Acceleration", func() {
