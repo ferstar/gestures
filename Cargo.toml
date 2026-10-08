@@ -1,3 +1,6 @@
 [workspace]
 resolver = "2"
 members = ["crates/gestures"]
+
+[workspace.package]
+version = "0.8.3"
