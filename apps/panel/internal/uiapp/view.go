@@ -8,6 +8,19 @@ import (
 	"gestures-panel/internal/model"
 )
 
+// card is a rounded, bordered panel that groups related controls.
+func card(c *ui.Context, t *ui.Theme, fn func()) {
+	ui.Column(c).Gap(12).Padding(16).Radius(10).
+		Background(t.Surface).Border(1, t.Border).Children(fn)
+}
+
+// statusPill shows a colored label, e.g. the service state in the header.
+func statusPill(c *ui.Context, t *ui.Theme, label string, color ui.Color) {
+	ui.Row(c).Padding(4, 12).Radius(999).Background(color).Children(func() {
+		ui.Text(c, label).FontSize(12).Bold().TextColor(t.Background)
+	})
+}
+
 // View is the window content.
 func (a *App) View(c *ui.Context) {
 	t := c.Theme()
@@ -21,24 +34,23 @@ func (a *App) View(c *ui.Context) {
 				ui.Text(c, "Gestures Panel").FontSize(18).Bold()
 				ui.Text(c, a.ConfigPath).FontSize(12).TextColor(t.TextMuted)
 			})
-			running := a.Status.Active
-			label := "Stopped"
-			if running {
-				label = "Running"
+			if a.Status.Active {
+				statusPill(c, t, "Running", t.Success)
+			} else {
+				statusPill(c, t, "Stopped", t.TextMuted)
 			}
-			ui.Badge(c, label)
 			if ui.Button(c, "Refresh").Clicked() {
 				a.RefreshStatus()
 				a.ReloadConfig()
 			}
 		})
 
-		ui.Row(c).Padding(0, 16).Background(t.Background).Children(func() {
+		ui.Row(c).Padding(8, 16).Background(t.Background).Children(func() {
 			ui.Tabs(c, &a.Tab, "Service", "Gestures").Grow(1)
 		})
 
 		// Scrollable main content takes remaining height.
-		ui.Scroll(c).Grow(1).Padding(16, 20).Gap(12).Children(func() {
+		ui.Scroll(c).Grow(1).Padding(16, 20).Gap(16).Children(func() {
 			switch a.Tab {
 			case 0:
 				a.serviceTab(c)
@@ -79,32 +91,34 @@ func (a *App) serviceTab(c *ui.Context) {
 	ui.Text(c, "Service").FontSize(16).Bold()
 	ui.Text(c, "Controls the gestures.service user unit (systemctl --user).").TextColor(t.TextMuted).FontSize(12)
 
-	ui.Form(c, func() {
-		state := st.State
-		if state == "" {
-			state = "unknown"
-		}
-		ui.Field(c, "Status", func() {
-			ui.Text(c, state)
-		})
-		ui.Field(c, "Display server", func() {
-			ui.Text(c, st.DisplayServer)
-		})
-		ui.Field(c, "input group", func() {
-			if !st.InputGroupOK {
-				ui.Text(c, "could not check")
-			} else if st.InInputGroup {
-				ui.Text(c, "yes — user is in input")
-			} else {
-				ui.Text(c, "no — add with: usermod -aG input $USER (then re-login)")
+	card(c, t, func() {
+		ui.Form(c, func() {
+			state := st.State
+			if state == "" {
+				state = "unknown"
 			}
-		})
-		ui.Field(c, "Enabled", func() {
-			if st.Enabled {
-				ui.Text(c, "yes")
-			} else {
-				ui.Text(c, "no")
-			}
+			ui.Field(c, "Status", func() {
+				ui.Text(c, state).Bold().TextColor(stateColor(t, state))
+			})
+			ui.Field(c, "Display server", func() {
+				ui.Text(c, st.DisplayServer)
+			})
+			ui.Field(c, "input group", func() {
+				if !st.InputGroupOK {
+					ui.Text(c, "could not check").TextColor(t.TextMuted)
+				} else if st.InInputGroup {
+					ui.Text(c, "yes — user is in input").TextColor(t.Success)
+				} else {
+					ui.Text(c, "no — add with: usermod -aG input $USER (then re-login)").TextColor(t.Danger)
+				}
+			})
+			ui.Field(c, "Enabled", func() {
+				if st.Enabled {
+					ui.Text(c, "yes")
+				} else {
+					ui.Text(c, "no").TextColor(t.TextMuted)
+				}
+			})
 		})
 	})
 
@@ -130,33 +144,44 @@ func (a *App) serviceTab(c *ui.Context) {
 		TextColor(t.TextMuted).FontSize(12)
 }
 
+// stateColor colors a systemd unit state: green when active, red when failed.
+func stateColor(t *ui.Theme, state string) ui.Color {
+	switch state {
+	case "active":
+		return t.Success
+	case "failed":
+		return t.Danger
+	default:
+		return t.TextMuted
+	}
+}
+
 func (a *App) gesturesTab(c *ui.Context) {
 	t := c.Theme()
+	n := 0
+	if a.Config != nil {
+		n = len(a.Config.Gestures)
+	}
+
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, "Gestures").FontSize(16).Bold().Grow(1)
+		ui.Column(c).Grow(1).Gap(2).Children(func() {
+			ui.Text(c, "Gestures").FontSize(16).Bold()
+			ui.Textf(c, "%d configured", n).TextColor(t.TextMuted).FontSize(12)
+		})
 		if ui.PrimaryButton(c, "Add gesture").Clicked() {
 			a.OpenEditor(-1)
 		}
 	})
 
-	n := 0
-	if a.Config != nil {
-		n = len(a.Config.Gestures)
-	}
 	if n == 0 {
-		ui.Text(c, "No gestures yet. Click Add gesture, or run `gestures generate-config`.").TextColor(t.TextMuted)
+		card(c, t, func() {
+			ui.Text(c, "No gestures yet.").Bold()
+			ui.Text(c, "Click Add gesture, or run `gestures generate-config`.").TextColor(t.TextMuted).FontSize(12)
+		})
 		return
 	}
 
 	ui.Column(c).Gap(8).Children(func() {
-		// Header row
-		ui.Row(c).Gap(8).Padding(4, 0).Children(func() {
-			ui.Text(c, "Type").Bold().FontSize(11).TextColor(t.TextMuted).Width(56)
-			ui.Text(c, "Fingers").Bold().FontSize(11).TextColor(t.TextMuted).Width(56)
-			ui.Text(c, "Dir").Bold().FontSize(11).TextColor(t.TextMuted).Width(48)
-			ui.Text(c, "Action").Bold().FontSize(11).TextColor(t.TextMuted).Grow(1)
-			ui.Text(c, "").Width(120)
-		})
 		for i := 0; i < n; i++ {
 			a.gestureRow(c, i)
 		}
@@ -166,20 +191,22 @@ func (a *App) gesturesTab(c *ui.Context) {
 func (a *App) gestureRow(c *ui.Context, i int) {
 	t := c.Theme()
 	g := a.Config.Gestures[i]
-	ui.Row(c).Gap(8).Padding(8, 10).AlignItems(ui.Center).
-		Background(t.Surface).Radius(8).Children(func() {
-		ui.Text(c, g.TypeLabel()).Width(56).FontSize(13)
-		ui.Textf(c, "%d", g.Fingers).Width(56).FontSize(13)
-		dir := g.Direction
-		if dir == "" {
-			dir = "—"
-		}
-		ui.Text(c, dir).Width(48).FontSize(13)
-		summary := g.ActionSummary()
-		if g.Name != "" {
-			summary = g.Name + " — " + summary
-		}
-		ui.Text(c, summary).Grow(1).FontSize(13).TextColor(t.TextMuted)
+
+	title := g.ActionSummary()
+	if g.Name != "" {
+		title = g.Name
+	}
+	meta := g.TypeLabel() + " · " + fmt.Sprintf("%d fingers", g.Fingers)
+	if g.Direction != "" {
+		meta += " · " + g.Direction
+	}
+
+	ui.Row(c).Gap(12).Padding(12, 14).AlignItems(ui.Center).
+		Background(t.Surface).Border(1, t.Border).Radius(10).Children(func() {
+		ui.Column(c).Grow(1).Gap(4).Children(func() {
+			ui.Text(c, title).FontSize(14).Bold()
+			ui.Text(c, meta).FontSize(12).TextColor(t.TextMuted)
+		})
 		ui.Row(c).Gap(6).Children(func() {
 			if ui.Button(c, "Edit").Clicked() {
 				a.OpenEditor(i)
