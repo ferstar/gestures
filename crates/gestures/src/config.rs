@@ -1,6 +1,6 @@
 use std::{env, fs, path::Path};
 
-use miette::{bail, IntoDiagnostic, Result};
+use miette::{IntoDiagnostic, Result};
 // use serde::{Deserialize, Serialize};
 use knuffel::{parse, Decode};
 
@@ -15,13 +15,13 @@ pub struct Config {
 
 impl Config {
     pub fn read_from_file(file: &Path) -> Result<Self> {
-        log::debug!("{:?}", &file);
+        log::debug!("{:?}", file);
         match fs::read_to_string(file) {
             Ok(s) => {
                 let source_name = file.to_string_lossy();
                 Ok(parse::<Config>(&source_name, &s).into_diagnostic()?)
             }
-            _ => bail!("Could not read config file"),
+            _ => Err(miette::miette!("Could not read config file")),
         }
     }
 
@@ -39,7 +39,7 @@ impl Config {
     pub fn read_default_config() -> Result<Self> {
         let config_home = Self::get_config_home()?;
 
-        log::debug!("{:?}", &config_home);
+        log::debug!("{:?}", config_home);
 
         for path in ["gestures.kdl", "gestures/gestures.kdl"] {
             match Self::read_from_file(Path::new(&format!("{config_home}/{path}"))) {
@@ -48,7 +48,7 @@ impl Config {
             }
         }
 
-        bail!("Could not find config file")
+        Err(miette::miette!("Could not find config file"))
     }
 
     pub fn read_from_optional_path(path: Option<&Path>) -> Result<Self> {

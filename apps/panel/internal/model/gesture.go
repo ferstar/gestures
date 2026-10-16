@@ -33,8 +33,8 @@ type Gesture struct {
 	Fingers   int
 
 	// Swipe drag fields (mouse-up-delay / acceleration).
-	Acceleration  *int   // typically 1–40; Rust uses i8
-	MouseUpDelay  *int64 // milliseconds
+	Acceleration *int   // typically 1–40; Rust uses i8
+	MouseUpDelay *int64 // milliseconds
 
 	// Command fields (single shell-ish string, as the Rust tool expects).
 	Start  string

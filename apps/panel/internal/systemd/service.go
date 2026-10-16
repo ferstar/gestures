@@ -15,7 +15,7 @@ const Unit = "gestures.service"
 
 // Status describes the user service and environment.
 type Status struct {
-	Available     bool   // systemctl --user works
+	Available     bool // systemctl --user works
 	Active        bool
 	Enabled       bool
 	State         string // active/inactive/failed/...

@@ -48,15 +48,15 @@ type App struct {
 // New loads config and status.
 func New() *App {
 	a := &App{
-		ConfigPath: kdl.ResolvePath(),
-		Config:     &model.Config{},
-		EditIndex:  -1,
+		ConfigPath:  kdl.ResolvePath(),
+		Config:      &model.Config{},
+		EditIndex:   -1,
 		EditFingers: 3,
-		EditAccel:  20,
-		EditDelay:  500,
-		EditMode:   model.ModeDrag,
+		EditAccel:   20,
+		EditDelay:   500,
+		EditMode:    model.ModeDrag,
 		EditKindStr: string(model.KindSwipe),
-		EditDir:    "any",
+		EditDir:     "any",
 	}
 	a.ReloadConfig()
 	a.RefreshStatus()
