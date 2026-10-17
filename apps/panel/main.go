@@ -14,6 +14,10 @@ import (
 //go:embed resources/tray.png
 var trayIcon []byte
 
+// trayMenu is package-level on purpose: the Linux tray only weakly references
+// menu items, so a local menu can be garbage collected and its clicks lost.
+var trayMenu *mygo.Menu
+
 func main() {
 	a := uiapp.New()
 	mygo.App.SetName("Gestures Panel")
@@ -21,8 +25,10 @@ func main() {
 	var (
 		mainWin  *mygo.Window
 		tray     *mygo.Tray
-		trayMenu *mygo.Menu
+		quitting bool
 	)
+
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { quitting = true })
 
 	openPanel := func() {
 		if mainWin != nil && !mainWin.IsDestroyed() {
@@ -40,6 +46,14 @@ func main() {
 			Content:   ui.View(a.View),
 		})
 		a.Win = mainWin
+		// Closing hides the window instead of destroying it, so "Open panel"
+		// in the tray always reuses it. A real quit still closes it.
+		mainWin.OnClose(func(e *mygo.CloseEvent) {
+			if !quitting {
+				e.PreventDefault()
+				mainWin.Hide()
+			}
+		})
 		mainWin.OnClosed(func() {
 			mainWin = nil
 			a.Win = nil
