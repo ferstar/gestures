@@ -9,7 +9,7 @@ A high-performance libinput-based touchpad gesture handler focused on optimizing
 **Core Features:**
 - Direct libinput API usage (no debug output parsing)
 - X11: libxdo API for minimal latency
-- Wayland: input-driven ydotool integration with queued movement coalescing
+- Wayland: persistent uinput virtual pointer with direct event writes; ydotool fallback
 - Three gesture types: Swipe, Pinch, Hold
 - Thread pool for command execution (4 workers, prevents PID exhaustion)
 - Real-time config reload via IPC
@@ -52,7 +52,17 @@ nix develop
 
 **Runtime dependencies:**
 - X11 mode: libxdo (linked directly; no extra dragging command)
-- Wayland mode: ydotool + ydotoold daemon (for 3-finger drag)
+- Wayland mode: read/write access to `/dev/uinput`; no daemon required by default. ydotool + ydotoold are needed only for fallback or explicit custom commands.
+
+### uinput Permissions
+
+If needed, load the kernel module with `sudo modprobe uinput`. On distributions using the `input` group, use `sudo usermod -aG input "$USER"` and log out/back in. Grant group access with `/etc/udev/rules.d/99-gestures-uinput.rules`:
+
+```udev
+KERNEL=="uinput", GROUP="input", MODE="0660"
+```
+
+Reload rules and trigger the uinput device, then restart gestures (full commands in README). Use the distribution's `uinput` group instead if appropriate. Input-group membership also grants access to other input devices. The evdev crate requires no additional native build libraries; flake build inputs remain unchanged.
 
 ## Code Architecture
 
@@ -62,7 +72,7 @@ nix develop
 src/
 ├── main.rs              # Entry point: CLI parsing, signal handling, display server detection
 ├── event_handler.rs     # Core event handler: libinput event loop, gesture recognition
-├── mouse_handler.rs     # Mouse control abstraction: X11 (libxdo) vs Wayland (ydotool)
+├── mouse_handler.rs     # Mouse control abstraction: libxdo / uinput / ydotool backends
 ├── config.rs            # Configuration parsing (KDL format)
 ├── ipc.rs               # IPC server (Unix socket) for config reload
 ├── ipc_client.rs        # IPC client
@@ -84,8 +94,11 @@ src/
 
 **2. MouseHandler Abstraction (mouse_handler.rs)**
 - X11 mode: Creates dedicated thread running libxdo, communicates via mpsc channel
-- Wayland mode: A dedicated worker serializes ydotool commands and waits for each child to exit
-- X11 initialization failure logs error but doesn't panic (allows fallback to Wayland mode)
+- Wayland mode: The worker owns a persistent `evdev::uinput::VirtualDevice` named `gestures-virtual-pointer`; emits REL_X/REL_Y and button events with one SYN_REPORT per frame
+- Backend order: X11 with successful libxdo initialization, otherwise uinput, then ydotool if uinput creation fails (with a permission warning). The ydotool fallback waits for each child to exit.
+- Virtual device lifetime: Owned by the worker; dropped after queued events are drained and held buttons released
+- Button mapping: X11 1/2/3 map to BTN_LEFT/BTN_MIDDLE/BTN_RIGHT; legacy button param2 (255) is ignored. ydotool uses zero-based left/right/middle indices plus 0x40 press or 0x80 release.
+- X11 initialization failure logs a warning and tries uinput.
 - Uses Timer for non-blocking mouse-up delays (for 3-finger drag)
 
 **3. Performance Optimizations (event_handler.rs)**
@@ -174,8 +187,8 @@ journalctl --user -u gestures -f
 3. **3-Finger Drag Requirements**:
    - Must set both `mouse-up-delay` and `acceleration`
    - `direction` must be "any"
-   - X11: Requires successful libxdo initialization
-   - Wayland: Requires ydotoold daemon running
+   - X11: Prefers libxdo, with the same uinput/ydotool fallback chain
+   - Wayland: Requires read/write access to `/dev/uinput`; `ydotoold` is only needed for fallback
 
 4. **Thread Safety**:
    - Config shared between threads using `Arc<RwLock<Config>>`

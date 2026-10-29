@@ -9,7 +9,7 @@ This fork focuses on high-performance three-finger dragging, with optimizations 
 - **Platform support**: X11 and Wayland, auto-detected at startup
 - **High performance**:
   - X11: direct libxdo calls for minimal latency
-  - Wayland: input-driven ydotool integration with queued movement coalescing
+  - Wayland: direct uinput writes through a persistent virtual pointer, with ydotool fallback
   - Thread pool for command execution (4 workers, prevents PID exhaustion)
 - **Gesture types**: Swipe (8 directions + any), Pinch, Hold
 - **Three-finger drag**: mouse acceleration and mouse-up delay for smooth dragging
@@ -29,8 +29,8 @@ This fork focuses on high-performance three-finger dragging, with optimizations 
 **Runtime dependencies:**
 
 - X11: nothing extra for dragging (uses `libxdo` directly)
-- Wayland: `ydotool` + the `ydotoold` daemon (for 3-finger drag)
-  - If your distribution's package has issues, try the official [ydotool binaries from GitHub releases](https://github.com/ReimuNotMoe/ydotool/releases)
+- Wayland: read/write access to `/dev/uinput` for the default direct-input backend. `ydotool` + `ydotoold` are only needed if uinput initialization fails or custom commands explicitly use ydotool.
+  - See the permission setup below; no daemon is required for the default uinput backend.
 
 ### With Cargo
 
@@ -132,7 +132,7 @@ This fork includes several performance improvements:
 3. **Input-driven dragging**: direct mouse movement follows touchpad events without a fixed frame-rate limit, retaining fractional pixels for slow-drag precision. The worker coalesces queued movements when needed. Custom swipe update commands remain limited to 60 updates per second.
 4. **Timer-based delays**: non-blocking mouse-up delays for smooth dragging
 5. **Event caching**: 1-second cache for gesture configuration lookups
-6. **Mouse command lifecycle**: a dedicated worker serializes Wayland mouse commands and waits for each `ydotool` child to exit. Its bounded queue coalesces adjacent movement events without crossing button events. On graceful shutdown, the worker drains queued commands, releases any held drag button, and is joined.
+6. **Mouse command lifecycle**: a dedicated worker owns a persistent uinput virtual pointer and writes movement/button events directly. If uinput initialization fails, it falls back to ydotool and waits for each child to exit. Its bounded queue coalesces adjacent movement events without crossing button events. On graceful shutdown, the worker drains queued commands, releases any held drag button, destroys its virtual device on exit, and is joined.
 
 ## Troubleshooting
 
@@ -150,38 +150,49 @@ This fork includes several performance improvements:
 
 **Wayland:**
 
-- If your distribution's package has issues, try the official [ydotool binaries from GitHub releases](https://github.com/ReimuNotMoe/ydotool/releases)
-- Ensure the `ydotoold` daemon is running: `systemctl --user status ydotoold`
-- Configure uinput permissions (see [issue #4](https://github.com/ferstar/gestures/issues/4))
+- The default backend writes directly to `/dev/uinput`; `ydotoold` is not required.
+- Check logs for the selected backend. Failure to create the virtual pointer logs the reason and falls back to ydotool.
+- Ensure the uinput module is loaded and your user can read/write `/dev/uinput`.
+- If using the fallback, install `ydotool`, run `ydotoold`, and check its socket permissions.
 
-### Wayland Permission Denied (trackpad or ydotool socket)
+### Wayland Permission Denied (trackpad or uinput)
 
-Symptoms:
-
-- Gestures cannot read touchpad events
-- Or logs contain ydotool socket permission/path errors
-
-Checks and fixes:
+Touchpad event access and virtual pointer creation both need appropriate permissions. On distributions using an `input` group:
 
 ```bash
-# 1) Ensure current user is in input-related group (distro-dependent)
-id -nG
-sudo usermod -aG input $USER
+# Load the kernel module if /dev/uinput is missing
+sudo modprobe uinput
 
-# 2) Re-login so new group membership takes effect
+# Add your user to the group (log out and back in afterward)
+sudo usermod -aG input "$USER"
 
-# 3) Run ydotoold as user service (not system/root service)
+# Inspect device ownership and permissions
+ls -l /dev/uinput /dev/input/event*
+```
+
+If `/dev/uinput` is not group-writable, create `/etc/udev/rules.d/99-gestures-uinput.rules` with:
+
+```udev
+KERNEL=="uinput", GROUP="input", MODE="0660"
+```
+
+Use your distribution's `uinput` group instead if applicable. Input-group membership also grants access to other input devices. Apply the rule and restart gestures after logging back in:
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=misc --sysname-match=uinput
+systemctl --user restart gestures.service
+```
+
+Only when using the ydotool fallback (or explicit ydotool custom commands):
+
+```bash
 systemctl --user enable --now ydotoold.service
 systemctl --user status ydotoold.service
-
-# 4) Verify socket exists in user runtime dir
 ls -la "$XDG_RUNTIME_DIR/.ydotool_socket"
 ```
 
-Notes:
-
-- Avoid `chmod 777` on the socket as a long-term fix.
-- Keep `gestures` and `ydotoold` in the same user session to avoid permission mismatch.
+Keep `gestures` and `ydotoold` in the same user session for the fallback. Avoid world-writable device or socket permissions.
 
 ### `libxdo` Shared Library Error on X11
 

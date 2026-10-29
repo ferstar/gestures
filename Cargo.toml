@@ -12,6 +12,7 @@ chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }
 ctrlc = "3.5"
 env_logger = { version = "0.11", features = ["auto-color"] }
+evdev = "0.13.2"
 input = "0.9"
 knuffel = "3.2"
 libxdo = "0.6"

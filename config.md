@@ -43,14 +43,24 @@ swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
 
 **Requirements:**
 - X11: No extra runtime dependency for drag (uses `libxdo` directly)
-- Wayland: Install `ydotool` and run `ydotoold` daemon
+- Wayland: Default direct uinput backend needs read/write access to `/dev/uinput`; no daemon is required. `ydotool` and `ydotoold` are only needed for fallback or explicit custom commands.
 
 **How it works:**
 - X11: Uses libxdo API directly (minimal latency)
-- Wayland: Sends ydotool commands through a dedicated worker without a fixed drag frame-rate limit; queued movements are coalesced and mouse release is timer-scheduled.
+- Wayland: A dedicated worker owns a persistent uinput virtual pointer and writes events directly without a fixed drag frame-rate limit; queued movements are coalesced and mouse release is timer-scheduled. If uinput creation fails, it logs a warning and falls back to ydotool.
+
+### Wayland uinput Permissions
+
+Load the module with `sudo modprobe uinput` if `/dev/uinput` is missing. On distributions using the `input` group, run `sudo usermod -aG input "$USER"` and log out/back in. If needed, create `/etc/udev/rules.d/99-gestures-uinput.rules` containing:
+
+```udev
+KERNEL=="uinput", GROUP="input", MODE="0660"
+```
+
+Reload udev rules, trigger the uinput device, and restart gestures. A distribution-specific `uinput` group may be used instead. See README for full commands. Input-group membership grants access to other input devices too.
 
 ### Manual Wayland Control
-If you prefer full control over Wayland commands:
+These explicit custom commands bypass the default uinput backend and require `ydotool` and a running `ydotoold` daemon:
 ```kdl
 swipe direction="any" fingers=3 \
   start="ydotool click -- 0x40" \
@@ -141,6 +151,6 @@ hold fingers=4 action="rofi -show drun"
 
 1. **Test commands first**: Run commands manually before adding to config
 2. **Reload config**: `gestures reload` (no restart needed)
-3. **Wayland ydotool**: Ensure `ydotoold` daemon is running
+3. **Wayland input access**: Ensure `/dev/uinput` is writable. Only the ydotool fallback requires a running `ydotoold` daemon.
 4. **Disable DE gestures**: Prevent conflicts with built-in gestures
 5. **Check logs**: Run `journalctl --user -u gestures -f` for debugging

@@ -1,4 +1,8 @@
 use chrono::Duration;
+use evdev::{
+    uinput::VirtualDevice, AttributeSet, EventType, InputEvent, KeyCode, RelativeAxisCode,
+    SynchronizationCode,
+};
 use libxdo::XDo;
 use std::env;
 use std::os::unix::fs::MetadataExt;
@@ -95,29 +99,46 @@ fn setup_x11_env() {
 const MOUSE_EVENT_QUEUE_SIZE: usize = 64;
 type MouseEvent = (MouseCommand, i32, i32);
 
-pub fn start_handler(is_xorg: bool) -> MouseHandler {
-    if is_xorg {
-        setup_x11_env();
-    }
-    let (tx, rx) = mpsc::sync_channel(MOUSE_EVENT_QUEUE_SIZE);
-    let worker = thread::spawn(move || {
-        let xdo = if is_xorg {
+enum MouseBackend {
+    X11(XDo),
+    Uinput(VirtualDevice),
+    Ydotool,
+}
+
+impl MouseBackend {
+    fn new(is_xorg: bool) -> Self {
+        if is_xorg {
             match XDo::new(None) {
                 Ok(xdo) => {
                     log::info!("Successfully initialized libxdo for X11");
-                    Some(xdo)
+                    return Self::X11(xdo);
                 }
                 Err(e) => {
-                    log::error!("Failed to initialize libxdo: {:?}", e);
-                    log::warn!("Falling back to ydotool mouse control mode");
-                    None
+                    log::warn!("Failed to initialize libxdo: {e:?}; trying uinput");
                 }
             }
-        } else {
-            None
-        };
-        mouse_worker(rx, |command, param1, param2| {
-            if let Some(ref xdo) = xdo {
+        }
+        match create_virtual_pointer() {
+            Ok(device) => {
+                log::info!("Using uinput virtual pointer");
+                Self::Uinput(device)
+            }
+            Err(e) => {
+                log::warn!(
+                    "Cannot create /dev/uinput virtual pointer: {e}; falling back to ydotool. \
+                     Ensure the uinput module is loaded and grant /dev/uinput access via the \
+                     input/uinput group or a udev rule such as \
+                     KERNEL==\"uinput\", GROUP=\"input\", MODE=\"0660\"; \
+                     re-login after changing groups. Fallback requires ydotool and ydotoold."
+                );
+                Self::Ydotool
+            }
+        }
+    }
+
+    fn execute(&mut self, command: MouseCommand, param1: i32, param2: i32) {
+        match self {
+            Self::X11(xdo) => {
                 let result = match command {
                     MouseCommand::MouseDown => xdo.mouse_down(param1),
                     MouseCommand::MouseUp => xdo.mouse_up(param1),
@@ -125,11 +146,110 @@ pub fn start_handler(is_xorg: bool) -> MouseHandler {
                     MouseCommand::Shutdown => unreachable!(),
                 };
                 if let Err(e) = result {
-                    log::warn!("Mouse command failed: {:?}", e);
+                    log::warn!("libxdo mouse command failed: {e:?}");
                 }
-            } else if let Err(e) = execute_ydotool("ydotool", command, param1, param2) {
-                log::warn!("ydotool mouse command failed: {}", e);
             }
+            Self::Uinput(device) => {
+                let result = mouse_event_frame(command, param1, param2).and_then(|frame| {
+                    // emit appends SYN_REPORT itself; omit the frame's final SYN to avoid two.
+                    device.emit(&frame[..frame.len() - 1])
+                });
+                if let Err(e) = result {
+                    log::warn!("uinput mouse command failed: {e}");
+                }
+            }
+            Self::Ydotool => {
+                if let Err(e) = execute_ydotool("ydotool", command, param1, param2) {
+                    log::warn!("ydotool mouse command failed: {e}");
+                }
+            }
+        }
+    }
+}
+
+fn create_virtual_pointer() -> std::io::Result<VirtualDevice> {
+    VirtualDevice::builder()?
+        .name("gestures-virtual-pointer")
+        .with_keys(&AttributeSet::from_iter([
+            KeyCode::BTN_LEFT,
+            KeyCode::BTN_RIGHT,
+            KeyCode::BTN_MIDDLE,
+        ]))?
+        .with_relative_axes(&AttributeSet::from_iter([
+            RelativeAxisCode::REL_X,
+            RelativeAxisCode::REL_Y,
+        ]))?
+        .build()
+}
+
+fn mouse_button(button: i32) -> std::io::Result<KeyCode> {
+    // MouseHandler uses X11 numbering, not ydotool's zero-based button indices.
+    match button {
+        1 => Ok(KeyCode::BTN_LEFT),
+        2 => Ok(KeyCode::BTN_MIDDLE),
+        3 => Ok(KeyCode::BTN_RIGHT),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Unsupported mouse button: {button}"),
+        )),
+    }
+}
+
+/// Build a complete evdev frame. For button commands param2 is a legacy placeholder (255).
+fn mouse_event_frame(
+    command: MouseCommand,
+    param1: i32,
+    param2: i32,
+) -> std::io::Result<Vec<InputEvent>> {
+    let mut events = Vec::with_capacity(3);
+    match command {
+        MouseCommand::MoveMouseRelative => {
+            if param1 != 0 {
+                events.push(InputEvent::new(
+                    EventType::RELATIVE.0,
+                    RelativeAxisCode::REL_X.0,
+                    param1,
+                ));
+            }
+            if param2 != 0 {
+                events.push(InputEvent::new(
+                    EventType::RELATIVE.0,
+                    RelativeAxisCode::REL_Y.0,
+                    param2,
+                ));
+            }
+        }
+        MouseCommand::MouseDown | MouseCommand::MouseUp => {
+            events.push(InputEvent::new(
+                EventType::KEY.0,
+                mouse_button(param1)?.0,
+                i32::from(command == MouseCommand::MouseDown),
+            ));
+        }
+        MouseCommand::Shutdown => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Shutdown is a worker control command, not an input event",
+            ));
+        }
+    }
+    events.push(InputEvent::new(
+        EventType::SYNCHRONIZATION.0,
+        SynchronizationCode::SYN_REPORT.0,
+        0,
+    ));
+    Ok(events)
+}
+
+pub fn start_handler(is_xorg: bool) -> MouseHandler {
+    if is_xorg {
+        setup_x11_env();
+    }
+    let (tx, rx) = mpsc::sync_channel(MOUSE_EVENT_QUEUE_SIZE);
+    let worker = thread::spawn(move || {
+        let mut backend = MouseBackend::new(is_xorg);
+        mouse_worker(rx, |command, param1, param2| {
+            backend.execute(command, param1, param2);
         });
     });
 
@@ -151,11 +271,20 @@ fn execute_ydotool(
 ) -> std::io::Result<()> {
     let mut process = Command::new(program);
     match command {
-        MouseCommand::MouseDown => {
-            process.args(["click", "--", "0x40"]);
-        }
-        MouseCommand::MouseUp => {
-            process.args(["click", "--", "0x80"]);
+        MouseCommand::MouseDown | MouseCommand::MouseUp => {
+            let index = match mouse_button(param1)? {
+                KeyCode::BTN_LEFT => 0,
+                KeyCode::BTN_RIGHT => 1,
+                KeyCode::BTN_MIDDLE => 2,
+                _ => unreachable!(),
+            };
+            // ydotool: 0x40 = press, 0x80 = release; low bits select the button.
+            let action = if command == MouseCommand::MouseDown {
+                0x40
+            } else {
+                0x80
+            };
+            process.args(["click", "--", &format!("0x{:x}", action | index)]);
         }
         MouseCommand::MoveMouseRelative => {
             process.args([
@@ -288,6 +417,106 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
     use std::sync::{Arc, Mutex};
+
+    fn event_values(events: &[InputEvent]) -> Vec<(EventType, u16, i32)> {
+        events
+            .iter()
+            .map(|event| (event.event_type(), event.code(), event.value()))
+            .collect()
+    }
+
+    #[test]
+    fn uinput_move_frame_omits_zero_axes_and_ends_with_one_sync() {
+        let syn = (
+            EventType::SYNCHRONIZATION,
+            SynchronizationCode::SYN_REPORT.0,
+            0,
+        );
+        for (x, y, expected) in [
+            (
+                7,
+                -4,
+                vec![
+                    (EventType::RELATIVE, RelativeAxisCode::REL_X.0, 7),
+                    (EventType::RELATIVE, RelativeAxisCode::REL_Y.0, -4),
+                    syn,
+                ],
+            ),
+            (
+                0,
+                -4,
+                vec![(EventType::RELATIVE, RelativeAxisCode::REL_Y.0, -4), syn],
+            ),
+            (
+                7,
+                0,
+                vec![(EventType::RELATIVE, RelativeAxisCode::REL_X.0, 7), syn],
+            ),
+            (0, 0, vec![syn]),
+        ] {
+            let frame = mouse_event_frame(MouseCommand::MoveMouseRelative, x, y).unwrap();
+            assert_eq!(event_values(&frame), expected);
+        }
+    }
+
+    #[test]
+    fn uinput_button_frames_map_x11_numbers_and_ignore_legacy_placeholder() {
+        for (button, key) in [
+            (1, KeyCode::BTN_LEFT),
+            (2, KeyCode::BTN_MIDDLE),
+            (3, KeyCode::BTN_RIGHT),
+        ] {
+            for (command, value) in [(MouseCommand::MouseDown, 1), (MouseCommand::MouseUp, 0)] {
+                for placeholder in [0, 255] {
+                    let frame = mouse_event_frame(command, button, placeholder).unwrap();
+                    assert_eq!(
+                        event_values(&frame),
+                        [
+                            (EventType::KEY, key.0, value),
+                            (
+                                EventType::SYNCHRONIZATION,
+                                SynchronizationCode::SYN_REPORT.0,
+                                0
+                            ),
+                        ]
+                    );
+                }
+            }
+        }
+        assert!(mouse_event_frame(MouseCommand::MouseDown, 4, 255).is_err());
+        assert!(mouse_event_frame(MouseCommand::Shutdown, 0, 0).is_err());
+    }
+
+    #[test]
+    fn coalesced_worker_moves_produce_one_uinput_frame_before_release() {
+        let (tx, rx) = mpsc::sync_channel(8);
+        for event in [
+            (MouseCommand::MouseDown, 1, 255),
+            (MouseCommand::MoveMouseRelative, 2, 3),
+            (MouseCommand::MoveMouseRelative, -1, -3),
+            (MouseCommand::Shutdown, 0, 0),
+        ] {
+            tx.send(event).unwrap();
+        }
+        let mut frames = Vec::new();
+        mouse_worker(rx, |command, x, y| {
+            frames.push(event_values(&mouse_event_frame(command, x, y).unwrap()));
+        });
+        assert_eq!(frames.len(), 3);
+        assert_eq!(frames[0][0], (EventType::KEY, KeyCode::BTN_LEFT.0, 1));
+        assert_eq!(
+            frames[1],
+            [
+                (EventType::RELATIVE, RelativeAxisCode::REL_X.0, 1),
+                (
+                    EventType::SYNCHRONIZATION,
+                    SynchronizationCode::SYN_REPORT.0,
+                    0,
+                ),
+            ]
+        );
+        assert_eq!(frames[2][0], (EventType::KEY, KeyCode::BTN_LEFT.0, 0));
+    }
 
     #[test]
     fn worker_coalesces_moves_without_crossing_button_events() {
