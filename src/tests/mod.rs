@@ -43,3 +43,64 @@ fn test_dir() {
         assert_eq!(SwipeDir::dir(x, y), expected);
     }
 }
+
+#[test]
+fn swipe_direction_sector_boundaries() {
+    use std::f64::consts::FRAC_PI_8;
+    use SwipeDir::*;
+
+    let sectors = [W, NW, N, NE, E, SE, S, SW, W];
+    for (i, multiplier) in [-7.0, -5.0, -3.0, -1.0, 1.0, 3.0, 5.0, 7.0]
+        .into_iter()
+        .enumerate()
+    {
+        let boundary = multiplier * FRAC_PI_8;
+        for (offset, expected) in [(-1e-10, &sectors[i]), (1e-10, &sectors[i + 1])] {
+            let angle = boundary + offset;
+            assert_eq!(SwipeDir::dir(angle.cos(), angle.sin()), *expected);
+        }
+    }
+    assert_eq!(SwipeDir::dir(-0.0, -0.0), Any);
+    assert_eq!(SwipeDir::dir(-1.0, -0.0), W);
+    assert_eq!(SwipeDir::dir(f64::MIN_POSITIVE, 0.0), E);
+}
+
+#[test]
+fn parses_swipe_pinch_and_hold_configuration() {
+    use crate::gestures::{hold::Hold, pinch::Pinch, pinch::PinchDir, swipe::Swipe, Gesture};
+
+    let config: Config = knuffel::parse(
+        "test.kdl",
+        r#"
+swipe fingers=3 direction="any" mouse-up-delay=450 acceleration=20 start="start" update="move $delta_x $delta_y" end="end"
+pinch fingers=2 direction="in" start="pinch-start" update="zoom $scale" end="pinch-end"
+hold fingers=4 action="hold-action"
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        config.gestures,
+        [
+            Gesture::Swipe(Swipe {
+                fingers: 3,
+                direction: SwipeDir::Any,
+                mouse_up_delay: Some(450),
+                acceleration: Some(20),
+                start: Some("start".into()),
+                update: Some("move $delta_x $delta_y".into()),
+                end: Some("end".into()),
+            }),
+            Gesture::Pinch(Pinch {
+                fingers: 2,
+                direction: PinchDir::In,
+                start: Some("pinch-start".into()),
+                update: Some("zoom $scale".into()),
+                end: Some("pinch-end".into()),
+            }),
+            Gesture::Hold(Hold {
+                fingers: 4,
+                action: Some("hold-action".into()),
+            }),
+        ]
+    );
+}

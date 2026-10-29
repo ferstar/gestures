@@ -47,7 +47,7 @@ swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
 
 **How it works:**
 - X11: Uses libxdo API directly (minimal latency)
-- Wayland: Uses timer-scheduled ydotool commands (optimized with 60 FPS throttling)
+- Wayland: Sends ydotool commands through a dedicated worker without a fixed drag frame-rate limit; queued movements are coalesced and mouse release is timer-scheduled.
 
 ### Manual Wayland Control
 If you prefer full control over Wayland commands:

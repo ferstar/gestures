@@ -334,7 +334,6 @@ dependencies = [
  "nix",
  "once_cell",
  "parking_lot",
- "regex",
  "signal-hook",
  "threadpool",
  "timer",

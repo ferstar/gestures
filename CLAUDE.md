@@ -9,7 +9,7 @@ A high-performance libinput-based touchpad gesture handler focused on optimizing
 **Core Features:**
 - Direct libinput API usage (no debug output parsing)
 - X11: libxdo API for minimal latency
-- Wayland: ydotool with 60 FPS throttling optimization
+- Wayland: input-driven ydotool integration with queued movement coalescing
 - Three gesture types: Swipe, Pinch, Hold
 - Thread pool for command execution (4 workers, prevents PID exhaustion)
 - Real-time config reload via IPC
@@ -51,7 +51,7 @@ nix develop
 - libxdo-dev / libxdo-devel
 
 **Runtime dependencies:**
-- X11 mode: xdotool (for 3-finger drag)
+- X11 mode: libxdo (linked directly; no extra dragging command)
 - Wayland mode: ydotool + ydotoold daemon (for 3-finger drag)
 
 ## Code Architecture
@@ -76,7 +76,7 @@ src/
 
 ### Key Design Patterns
 
-**1. Display Server Auto-detection (main.rs:32-45)**
+**1. Display Server Auto-detection (`main.rs`, `detect_wayland`)**
 - Checks `WAYLAND_DISPLAY` environment variable (most reliable)
 - Falls back to `XDG_SESSION_TYPE`
 - Defaults to X11 if unable to detect
@@ -84,14 +84,16 @@ src/
 
 **2. MouseHandler Abstraction (mouse_handler.rs)**
 - X11 mode: Creates dedicated thread running libxdo, communicates via mpsc channel
-- Wayland mode: Directly invokes ydotool commands
+- Wayland mode: A dedicated worker serializes ydotool commands and waits for each child to exit
 - X11 initialization failure logs error but doesn't panic (allows fallback to Wayland mode)
 - Uses Timer for non-blocking mouse-up delays (for 3-finger drag)
 
 **3. Performance Optimizations (event_handler.rs)**
 - **Gesture Cache** (GestureCache): Groups gesture configs by finger count, refreshes every second
-- **FPS Throttling** (ThrottleState): 60 FPS limit for Wayland updates (accounting for ydotool ~100ms latency)
-- **Regex Caching**: One-time compilation using `once_cell::Lazy` (utils.rs)
+- **Command Throttling** (ThrottleState): Custom swipe update commands are limited to 60 updates per second; direct dragging follows input events without a fixed frame-rate limit
+- **Variable Substitution**: Literal `str::replace` calls preserve two-decimal formatting (`utils.rs`, `render_command`)
+- **Direct Drag Delivery**: Retains fractional pixels and retries movement rejected by the bounded mouse queue on the next update; the worker coalesces adjacent moves without crossing button events
+- **Duplicate Direct Gestures**: Only the first direct gesture per finger count is used; changed conflicting configurations produce a warning
 - **Thread Pool**: 4 worker threads for command execution (prevents PID exhaustion during fast gestures)
 
 **4. IPC Config Reload (ipc.rs)**
@@ -99,7 +101,7 @@ src/
 - Non-blocking mode, periodically checks SHUTDOWN flag
 - Updates shared config using RwLock when "reload" command received
 
-**5. Direct Mouse Control Detection (event_handler.rs:344-350)**
+**5. Direct Mouse Control Detection (`event_handler.rs`, `is_direct_mouse_gesture`)**
 ```rust
 fn is_direct_mouse_gesture(gesture: &Gesture) -> bool {
     if let Gesture::Swipe(j) = gesture {
@@ -138,8 +140,8 @@ Main handler functions in `event_handler.rs`:
 
 ### Adjusting Performance Parameters
 
-- **FPS Throttling**: Modify `ThrottleState::new(60)` in `event_handler.rs:89`
-- **Cache Refresh Interval**: Modify `Duration::from_secs(1)` in `event_handler.rs:330`
+- **Custom Swipe Command Throttling**: Modify `ThrottleState::new(60)` in `event_handler.rs`, `EventHandler::new`
+- **Cache Refresh Interval**: Modify `Duration::from_secs(1)` in `event_handler.rs`, `refresh_cache_if_needed`
 - **Thread Pool Size**: Modify thread pool configuration in `utils.rs`
 
 ### Debugging
@@ -159,7 +161,7 @@ journalctl --user -u gestures -f
 
 ## Important Constraints
 
-1. **X11 Environment Detection** (mouse_handler.rs:24-73):
+1. **X11 Environment Detection** (`mouse_handler.rs`, `setup_x11_env`):
    - Automatically attempts to set `DISPLAY` and `XAUTHORITY`
    - Searches common locations: `~/.Xauthority`, `/tmp/xauth_*`
    - Gracefully degrades if libxdo initialization fails (logs warning but doesn't panic)
@@ -182,7 +184,7 @@ journalctl --user -u gestures -f
 
 ## Testing Strategy
 
-- Unit tests located in `src/tests/mod.rs`
+- Unit tests located in `src/tests/mod.rs` and module-local test modules
 - Integration tests require touchpad device, typically manual testing
 - Recommended manual testing workflow after modifying gesture logic:
   1. Generate config: `gestures generate-config`

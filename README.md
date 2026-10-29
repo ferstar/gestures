@@ -9,7 +9,7 @@ This fork focuses on high-performance three-finger dragging, with optimizations 
 - **Platform support**: X11 and Wayland, auto-detected at startup
 - **High performance**:
   - X11: direct libxdo calls for minimal latency
-  - Wayland: ydotool integration with 60 FPS throttling
+  - Wayland: input-driven ydotool integration with queued movement coalescing
   - Thread pool for command execution (4 workers, prevents PID exhaustion)
 - **Gesture types**: Swipe (8 directions + any), Pinch, Hold
 - **Three-finger drag**: mouse acceleration and mouse-up delay for smooth dragging
@@ -129,7 +129,7 @@ This fork includes several performance improvements:
 
 1. **Regex caching**: one-time compilation using `once_cell::Lazy`
 2. **Thread pool**: a 4-worker pool prevents PID exhaustion during fast gestures
-3. **FPS throttling**: mouse updates are limited to 60 FPS while accumulating skipped displacement and fractional pixels. Normal drag completion flushes remaining whole-pixel movement before releasing the button; cancellation discards pending movement.
+3. **Input-driven dragging**: direct mouse movement follows touchpad events without a fixed frame-rate limit, retaining fractional pixels for slow-drag precision. The worker coalesces queued movements when needed. Custom swipe update commands remain limited to 60 updates per second.
 4. **Timer-based delays**: non-blocking mouse-up delays for smooth dragging
 5. **Event caching**: 1-second cache for gesture configuration lookups
 6. **Mouse command lifecycle**: a dedicated worker serializes Wayland mouse commands and waits for each `ydotool` child to exit. Its bounded queue coalesces adjacent movement events without crossing button events. On graceful shutdown, the worker drains queued commands, releases any held drag button, and is joined.
@@ -138,8 +138,9 @@ This fork includes several performance improvements:
 
 ### High CPU on Wayland
 
-- The default 60 FPS throttle should keep CPU under 5%
-- Adjust in `src/event_handler.rs` (`ThrottleState::new(60)`) if needed
+- Direct dragging has no fixed frame-rate limit; its bounded worker queue coalesces adjacent movement events.
+- Custom swipe update commands are limited by `ThrottleState::new(60)` in `src/event_handler.rs`.
+- Check service CPU usage and logs while dragging; resource use depends on the touchpad event rate and command execution speed.
 
 ### 3-Finger Drag Not Working
 

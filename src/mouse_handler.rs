@@ -241,15 +241,15 @@ impl MouseHandler {
         }
     }
 
-    pub fn move_mouse_relative(&mut self, x_val: i32, y_val: i32) {
+    pub fn move_mouse_relative(&mut self, x_val: i32, y_val: i32) -> bool {
         if x_val == 0 && y_val == 0 {
-            return;
+            return true;
         }
 
         self.cancel_timer_if_present();
         if let Some(ref tx) = self.tx {
             match tx.try_send((MouseCommand::MoveMouseRelative, x_val, y_val)) {
-                Ok(()) => {}
+                Ok(()) => return true,
                 Err(TrySendError::Full(_)) => {
                     self.dropped_move_events = self.dropped_move_events.saturating_add(1);
                     self.maybe_report_drop_stats();
@@ -259,6 +259,7 @@ impl MouseHandler {
                 }
             }
         }
+        false
     }
 
     fn cancel_timer_if_present(&mut self) {
