@@ -82,6 +82,30 @@ pub struct EventHandler {
     event: Gesture,
     cache: GestureCache,
     throttle: ThrottleState,
+    drag_motion: DragMotion,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct DragMotion {
+    x: f64,
+    y: f64,
+}
+
+impl DragMotion {
+    fn accumulate(&mut self, dx: f64, dy: f64, acceleration: f64) {
+        self.x += dx * acceleration;
+        self.y += dy * acceleration;
+    }
+
+    fn flush(&mut self, mh: &mut dyn MouseActions) {
+        let (x, y) = (self.x as i32, self.y as i32);
+        if x != 0 || y != 0 {
+            mh.move_mouse_relative(x, y);
+            // Carry fractional pixels into the next update instead of discarding them.
+            self.x -= x as f64;
+            self.y -= y as f64;
+        }
+    }
 }
 
 trait MouseActions {
@@ -111,6 +135,7 @@ impl EventHandler {
             event: Gesture::None,
             cache: GestureCache::new(),
             throttle: ThrottleState::new(60),
+            drag_motion: DragMotion::default(),
         };
         handler.update_cache();
         handler
@@ -383,10 +408,10 @@ impl EventHandler {
         &mut self,
         fingers: i32,
         mh: &mut impl MouseActions,
-        handler: F,
+        mut handler: F,
     ) -> Result<()>
     where
-        F: Fn(&Gesture, &mut dyn MouseActions) -> Result<()>,
+        F: FnMut(&Gesture, &mut dyn MouseActions) -> Result<()>,
     {
         self.refresh_cache_if_needed();
 
@@ -409,6 +434,8 @@ impl EventHandler {
     }
 
     fn handle_swipe_begin(&mut self, fingers: i32, mh: &mut impl MouseActions) -> Result<()> {
+        self.drag_motion = DragMotion::default();
+        self.throttle.last_update = std::time::Instant::now() - self.throttle.min_interval;
         self.event = Gesture::Swipe(Swipe::new(fingers));
 
         self.handle_matching_gesture(fingers, mh, |gesture, mh| {
@@ -435,17 +462,16 @@ impl EventHandler {
         log::debug!("{:?} {:?}", &current_dir, &fingers);
 
         let is_throttled = !self.throttle.should_update();
+        let mut drag_motion = self.drag_motion;
 
         let current_dir = current_dir.clone();
-        self.handle_matching_gesture(fingers, mh, move |gesture, mh| {
+        self.handle_matching_gesture(fingers, mh, |gesture, mh| {
             if let Gesture::Swipe(j) = gesture {
                 if Self::is_direct_mouse_gesture(gesture) {
+                    let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
+                    drag_motion.accumulate(dx, dy, acceleration);
                     if !is_throttled {
-                        let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
-                        mh.move_mouse_relative(
-                            (dx * acceleration) as i32,
-                            (dy * acceleration) as i32,
-                        );
+                        drag_motion.flush(mh);
                     }
                 } else if (j.direction == current_dir || j.direction == SwipeDir::Any)
                     && !is_throttled
@@ -461,6 +487,7 @@ impl EventHandler {
             }
             Ok(())
         })?;
+        self.drag_motion = drag_motion;
 
         self.event = Gesture::Swipe(Swipe::with_direction(fingers, swipe_dir));
         Ok(())
@@ -472,9 +499,11 @@ impl EventHandler {
         } else {
             return Ok(());
         };
+        let mut drag_motion = self.drag_motion;
         self.handle_matching_gesture(fingers, mh, |gesture, mh| {
             if let Gesture::Swipe(j) = gesture {
                 if Self::is_direct_mouse_gesture(gesture) {
+                    drag_motion.flush(mh);
                     let delay = j.mouse_up_delay.unwrap_or_default();
                     mh.mouse_up_delay(1, delay);
                 } else if j.direction == direction || j.direction == SwipeDir::Any {
@@ -483,11 +512,13 @@ impl EventHandler {
             }
             Ok(())
         })?;
+        self.drag_motion = DragMotion::default();
         self.event = Gesture::None;
         Ok(())
     }
 
     fn handle_swipe_cancel(&mut self, mh: &mut impl MouseActions) -> Result<()> {
+        self.drag_motion = DragMotion::default();
         let fingers = if let Gesture::Swipe(s) = &self.event {
             s.fingers
         } else {
@@ -559,24 +590,157 @@ mod tests {
 
     struct MockMouseHandler {
         mouse_up_calls: Vec<(i32, i64)>,
+        calls: Vec<MouseCall>,
+    }
+
+    #[derive(Debug, PartialEq)]
+    enum MouseCall {
+        Down,
+        Move(i32, i32),
+        Up,
     }
 
     impl MockMouseHandler {
         fn new() -> Self {
             Self {
                 mouse_up_calls: Vec::new(),
+                calls: Vec::new(),
             }
         }
     }
 
     impl MouseActions for MockMouseHandler {
-        fn mouse_down(&mut self, _button: i32) {}
+        fn mouse_down(&mut self, _button: i32) {
+            self.calls.push(MouseCall::Down);
+        }
 
         fn mouse_up_delay(&mut self, button: i32, delay_ms: i64) {
             self.mouse_up_calls.push((button, delay_ms));
+            self.calls.push(MouseCall::Up);
         }
 
-        fn move_mouse_relative(&mut self, _x_val: i32, _y_val: i32) {}
+        fn move_mouse_relative(&mut self, x_val: i32, y_val: i32) {
+            self.calls.push(MouseCall::Move(x_val, y_val));
+        }
+    }
+
+    fn drag_handler() -> EventHandler {
+        EventHandler::new(Arc::new(RwLock::new(Config {
+            gestures: vec![Gesture::Swipe(Swipe {
+                direction: SwipeDir::Any,
+                fingers: 3,
+                update: None,
+                start: None,
+                end: None,
+                acceleration: Some(20),
+                mouse_up_delay: Some(450),
+            })],
+        })))
+    }
+
+    fn throttle_updates(handler: &mut EventHandler) {
+        handler.throttle.min_interval = std::time::Duration::from_secs(3600);
+        handler.throttle.last_update = std::time::Instant::now();
+    }
+
+    fn allow_update(handler: &mut EventHandler) {
+        handler.throttle.last_update = std::time::Instant::now() - handler.throttle.min_interval;
+    }
+
+    #[test]
+    fn throttled_drag_accumulates_all_displacement() {
+        let mut handler = drag_handler();
+        let mut mouse = MockMouseHandler::new();
+        handler.handle_swipe_begin(3, &mut mouse).unwrap();
+        throttle_updates(&mut handler);
+        handler.handle_swipe_update(3.25, -1.5, &mut mouse).unwrap();
+        handler.handle_swipe_update(0.75, -0.5, &mut mouse).unwrap();
+        assert_eq!(mouse.calls, [MouseCall::Down]);
+        allow_update(&mut handler);
+        handler.handle_swipe_update(2.0, -3.0, &mut mouse).unwrap();
+        assert_eq!(mouse.calls, [MouseCall::Down, MouseCall::Move(12, -10)]);
+    }
+
+    #[test]
+    fn slow_drag_retains_fractional_pixels_between_frames() {
+        let mut handler = drag_handler();
+        let mut mouse = MockMouseHandler::new();
+        handler.handle_swipe_begin(3, &mut mouse).unwrap();
+        for _ in 0..4 {
+            allow_update(&mut handler);
+            handler
+                .handle_swipe_update(0.125, -0.125, &mut mouse)
+                .unwrap();
+        }
+        assert_eq!(mouse.calls, [MouseCall::Down, MouseCall::Move(1, -1)]);
+    }
+
+    #[test]
+    fn ending_drag_flushes_pending_movement_before_releasing_button() {
+        let mut handler = drag_handler();
+        let mut mouse = MockMouseHandler::new();
+        handler.handle_swipe_begin(3, &mut mouse).unwrap();
+        throttle_updates(&mut handler);
+        handler
+            .handle_swipe_update(2.75, -1.25, &mut mouse)
+            .unwrap();
+        handler.handle_swipe_end(&mut mouse).unwrap();
+        assert_eq!(
+            mouse.calls,
+            [MouseCall::Down, MouseCall::Move(5, -2), MouseCall::Up]
+        );
+        assert_eq!(mouse.mouse_up_calls, [(1, 450)]);
+        assert_eq!((handler.drag_motion.x, handler.drag_motion.y), (0.0, 0.0));
+    }
+
+    #[test]
+    fn cancelled_drag_does_not_move_or_carry_pending_displacement() {
+        let mut handler = drag_handler();
+        let mut mouse = MockMouseHandler::new();
+        handler.handle_swipe_begin(3, &mut mouse).unwrap();
+        throttle_updates(&mut handler);
+        handler.handle_swipe_update(8.0, -9.0, &mut mouse).unwrap();
+        handler.handle_swipe_cancel(&mut mouse).unwrap();
+        handler.handle_swipe_begin(3, &mut mouse).unwrap();
+        handler.handle_swipe_update(0.5, -0.5, &mut mouse).unwrap();
+        assert_eq!(
+            mouse.calls,
+            [
+                MouseCall::Down,
+                MouseCall::Up,
+                MouseCall::Down,
+                MouseCall::Move(1, -1)
+            ]
+        );
+    }
+
+    #[test]
+    fn drag_distance_is_independent_of_throttle_schedule() {
+        let mut totals = Vec::new();
+        for every in [1, 4, 1000] {
+            let mut handler = drag_handler();
+            let mut mouse = MockMouseHandler::new();
+            handler.handle_swipe_begin(3, &mut mouse).unwrap();
+            for i in 0..80 {
+                throttle_updates(&mut handler);
+                if i % every == 0 {
+                    allow_update(&mut handler);
+                }
+                handler
+                    .handle_swipe_update(0.375, -0.125, &mut mouse)
+                    .unwrap();
+            }
+            handler.handle_swipe_end(&mut mouse).unwrap();
+            let total = mouse.calls.iter().fold((0, 0), |(x, y), call| {
+                if let MouseCall::Move(dx, dy) = call {
+                    (x + dx, y + dy)
+                } else {
+                    (x, y)
+                }
+            });
+            totals.push(total);
+        }
+        assert_eq!(totals, [(60, -20); 3]);
     }
 
     #[test]

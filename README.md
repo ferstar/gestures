@@ -126,7 +126,10 @@ This fork includes several performance improvements:
 
 1. **Regex Caching**: One-time compilation using `once_cell::Lazy`
 2. **Thread Pool**: 4-worker pool prevents PID exhaustion during fast gestures
-3. **FPS Throttling**: 60 FPS limit for Wayland (considering ydotool ~100ms latency)
+3. **FPS Throttling**: Mouse updates are limited to 60 FPS while accumulating
+   skipped displacement and fractional pixels. Normal drag completion flushes
+   remaining whole-pixel movement before releasing the button; cancellation
+   discards pending movement.
 4. **Timer-based Delays**: Non-blocking mouse-up delays for smooth dragging
 5. **Event Caching**: 1-second cache for gesture configuration lookups
 6. **Mouse Command Lifecycle**: A dedicated worker serializes Wayland mouse commands
