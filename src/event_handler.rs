@@ -142,7 +142,7 @@ impl EventHandler {
     }
 
     pub fn init(&mut self, input: &mut Libinput) -> Result<()> {
-        log::debug!("{:?}  {:?}", &self, &input);
+        log::debug!("{:?}  {:?}", self, input);
         self.init_ctx(input)
             .map_err(|_| miette!("Could not initialize libinput"))?;
         if self.has_gesture_device(input) {
@@ -166,7 +166,7 @@ impl EventHandler {
 
         for event in &mut *input {
             if let Event::Device(e) = event {
-                log::debug!("Device: {:?}", &e);
+                log::debug!("Device: {:?}", e);
                 if e.device().has_capability(DeviceCapability::Gesture) {
                     log::debug!("Found gesture device");
                     return true;
@@ -228,7 +228,7 @@ impl EventHandler {
             }
             GestureHoldEvent::End(_e) => {
                 if let Gesture::Hold(s) = &self.event {
-                    log::debug!("Hold: {:?}", &s.fingers);
+                    log::debug!("Hold: {:?}", s.fingers);
                     if let Some(gestures) = self.cache.hold_gestures.get(&s.fingers) {
                         for gesture in gestures {
                             if let Gesture::Hold(j) = gesture {
@@ -288,10 +288,10 @@ impl EventHandler {
                     let fingers = s.fingers;
                     log::debug!(
                         "Pinch: scale={:?} angle={:?} direction={:?} fingers={:?}",
-                        &scale,
-                        &delta_angle,
-                        &dir,
-                        &s.fingers
+                        scale,
+                        delta_angle,
+                        dir,
+                        s.fingers
                     );
                     if let Some(gestures) = self.cache.pinch_gestures.get(&fingers) {
                         for gesture in gestures {
@@ -459,7 +459,7 @@ impl EventHandler {
             return Ok(());
         };
 
-        log::debug!("{:?} {:?}", &current_dir, &fingers);
+        log::debug!("{:?} {:?}", current_dir, fingers);
 
         let is_throttled = !self.throttle.should_update();
         let mut drag_motion = self.drag_motion;

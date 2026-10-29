@@ -254,7 +254,7 @@ fn main() -> Result<()> {
                 );
                 Config::default()
             });
-            log::debug!("{:#?}", &c);
+            log::debug!("{:#?}", c);
 
             let is_wayland = if app.wayland {
                 log::info!("Forced Wayland mode via command line");

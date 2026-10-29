@@ -24,7 +24,7 @@ static COMMAND_SENDER: Lazy<SyncSender<String>> = Lazy::new(|| {
 fn command_dispatch_loop(rx: Receiver<String>) {
     while let Ok(args) = rx.recv() {
         THREAD_POOL.execute(move || {
-            log::debug!("{:?}", &args);
+            log::debug!("{:?}", args);
             match Command::new("sh").arg("-c").arg(&args).status() {
                 Ok(status) => {
                     if !status.success() {
@@ -36,7 +36,7 @@ fn command_dispatch_loop(rx: Receiver<String>) {
                     }
                 }
                 Err(e) => {
-                    log::error!("Failed to execute command '{}': {}", &args, e);
+                    log::error!("Failed to execute command '{}': {}", args, e);
                 }
             }
         });
