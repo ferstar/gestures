@@ -129,6 +129,10 @@ This fork includes several performance improvements:
 3. **FPS Throttling**: 60 FPS limit for Wayland (considering ydotool ~100ms latency)
 4. **Timer-based Delays**: Non-blocking mouse-up delays for smooth dragging
 5. **Event Caching**: 1-second cache for gesture configuration lookups
+6. **Mouse Command Lifecycle**: A dedicated worker serializes Wayland mouse commands
+   and waits for each `ydotool` child to exit. Its bounded queue coalesces adjacent
+   movement events without crossing button events. On graceful shutdown, the worker
+   drains queued commands, releases any held drag button, and is joined.
 
 ## Troubleshooting
 
