@@ -15,10 +15,17 @@ fn test_config_default() {
     assert_eq!(
         c,
         Config {
-            // // device: None,
+            touchpad: None,
             gestures: vec![],
         }
     );
+}
+
+#[test]
+fn generated_config_leaves_touchpad_acceleration_opt_in() {
+    let config: Config = knuffel::parse("generated.kdl", crate::get_default_config()).unwrap();
+    assert_eq!(config.touchpad, None);
+    assert_eq!(config.gestures.len(), 1);
 }
 
 #[test]

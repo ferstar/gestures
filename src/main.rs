@@ -4,6 +4,7 @@ mod gestures;
 mod ipc;
 mod ipc_client;
 mod mouse_handler;
+mod touchpad;
 mod utils;
 
 #[cfg(test)]
@@ -125,12 +126,16 @@ fn get_default_config() -> &'static str {
     r#"// Gestures Configuration
 // See https://github.com/ferstar/gestures for full documentation
 
+// Optional libinput acceleration for this process only (does not change desktop settings):
+// touchpad accel-profile="adaptive" accel-speed=0.3
+// Swipe acceleration is an extra linear multiplier after libinput acceleration.
+
 // ====================
 // 3-Finger Drag (macOS-like)
 // ====================
 // Works on both X11 and Wayland
 // - X11: Uses libxdo API directly (minimal latency)
-// - Wayland: Uses ydotool (ensure ydotoold daemon is running)
+// - Wayland: Uses direct uinput writes; ydotool is a fallback
 swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
 
 // ====================

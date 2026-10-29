@@ -73,7 +73,8 @@ src/
 ├── main.rs              # Entry point: CLI parsing, signal handling, display server detection
 ├── event_handler.rs     # Core event handler: libinput event loop, gesture recognition
 ├── mouse_handler.rs     # Mouse control abstraction: libxdo / uinput / ydotool backends
-├── config.rs            # Configuration parsing (KDL format)
+├── config.rs            # Configuration parsing (KDL format), validated touchpad acceleration
+├── touchpad.rs          # Device tracking and acceleration settings for this libinput context
 ├── ipc.rs               # IPC server (Unix socket) for config reload
 ├── ipc_client.rs        # IPC client
 ├── utils.rs             # Command execution, variable substitution utilities
@@ -134,6 +135,14 @@ This function identifies 3-finger drag gestures (direction="any" + mouse-up-dela
   2. `$XDG_CONFIG_HOME/gestures/gestures.kdl`
   3. `~/.config/gestures.kdl`
 - Supports variable substitution: `$delta_x`, `$delta_y`, `$scale`, `$delta_angle`
+
+### Per-Context Touchpad Acceleration
+
+Optional top-level KDL node: `touchpad accel-profile="adaptive" accel-speed=0.3`. Both fields are optional. Profiles are `adaptive` or `flat`; speed must be finite and within [-1.0, 1.0], validated during knuffel decoding. Existing gesture-only configurations remain valid.
+
+`touchpad.rs` tracks gesture devices from startup and runtime DeviceAdded/DeviceRemoved events. It sets configured fields with input 0.9's `config_accel_set_profile` / `config_accel_set_speed`, skips devices without acceleration, and logs setter failures without aborting. `EventHandler::handle_event` compares the touchpad configuration on each dispatch (including the 100 ms poll timeout) and reapplies changes to existing devices after IPC reload.
+
+Only this process's libinput gesture deltas are affected; compositor pointer settings stay independent. Direct drag `acceleration` is an additional linear multiplier (value / 10) after libinput acceleration. Missing fields are never set: defaults apply at startup; removed overrides retain their previous device value until an explicit replacement or process restart. Generated config includes only a commented touchpad example. Mock tests cover configured-field calls, reload, hotplug/removal, and unsupported devices.
 
 ## Common Development Tasks
 

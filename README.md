@@ -87,6 +87,21 @@ swipe direction="w" fingers=4 end="hyprctl dispatch workspace e-1"
 swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
 ```
 
+### Touchpad Acceleration for This Process
+
+Optionally match the acceleration profile and speed used by your desktop:
+
+```kdl
+touchpad accel-profile="adaptive" accel-speed=0.3
+swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=10
+```
+
+Both properties are optional: `accel-profile` accepts `"adaptive"` or `"flat"`; `accel-speed` accepts a finite number from `-1.0` (slowest) to `1.0` (fastest), including `0.0` (device default speed). Invalid values reject the configuration.
+
+These settings apply only to gesture movement in this program's independent libinput context (dragging and swipe `$delta_x`/`$delta_y`). They do not change the compositor's system pointer settings. The swipe `acceleration` property applies an additional linear multiplier to direct dragging **after** libinput acceleration: `10` = 1x, `20` = 2x. Start with `acceleration=10` when matching your desktop's profile and speed.
+
+`gestures reload` applies changed settings to existing devices, even while idle; newly connected gesture devices receive the current settings. Unspecified properties are left untouched (libinput defaults on startup). To restore a previously overridden setting, set its desired value explicitly, or remove the override and restart gestures.
+
 ## Running
 
 ### Systemd (Recommended)

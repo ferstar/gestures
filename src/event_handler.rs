@@ -14,9 +14,9 @@ use input::{
             GestureEndEvent, GestureEventCoordinates, GestureEventTrait, GestureHoldEvent,
             GesturePinchEvent, GesturePinchEventTrait, GestureSwipeEvent,
         },
-        Event, EventTrait, GestureEvent,
+        DeviceEvent, Event, EventTrait, GestureEvent,
     },
-    DeviceCapability, Libinput, LibinputInterface,
+    Device, Libinput, LibinputInterface,
 };
 use miette::{miette, Result};
 use nix::{
@@ -27,6 +27,7 @@ use nix::{
 use crate::config::Config;
 use crate::gestures::{hold::*, pinch::*, swipe::*, *};
 use crate::mouse_handler::MouseHandler;
+use crate::touchpad::TouchpadDevices;
 use crate::utils::{exec_command_from_string, exec_update_command_from_string};
 
 use parking_lot::RwLock;
@@ -84,6 +85,7 @@ pub struct EventHandler {
     cache: GestureCache,
     throttle: ThrottleState,
     drag_motion: DragMotion,
+    touchpads: TouchpadDevices<Device>,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -130,12 +132,14 @@ impl MouseActions for MouseHandler {
 
 impl EventHandler {
     pub fn new(config: Arc<RwLock<Config>>) -> Self {
+        let touchpad_config = config.read().touchpad.unwrap_or_default();
         let mut handler = Self {
             config,
             event: Gesture::None,
             cache: GestureCache::new(),
             throttle: ThrottleState::new(60),
             drag_motion: DragMotion::default(),
+            touchpads: TouchpadDevices::new(touchpad_config),
         };
         handler.update_cache();
         handler
@@ -166,16 +170,20 @@ impl EventHandler {
 
         for event in &mut *input {
             if let Event::Device(e) = event {
-                log::debug!("Device: {:?}", e);
-                if e.device().has_capability(DeviceCapability::Gesture) {
-                    log::debug!("Found gesture device");
-                    return true;
-                }
+                self.handle_device_event(e);
             }
         }
 
-        log::debug!("No gesture device found");
-        false
+        self.touchpads.has_devices()
+    }
+
+    fn handle_device_event(&mut self, event: DeviceEvent) {
+        log::debug!("Device: {event:?}");
+        match event {
+            DeviceEvent::Added(event) => self.touchpads.add(event.device()),
+            DeviceEvent::Removed(event) => self.touchpads.remove(&event.device()),
+            _ => {}
+        }
     }
 
     pub fn main_loop(&mut self, input: &mut Libinput, mh: &mut MouseHandler) -> Result<()> {
@@ -204,14 +212,19 @@ impl EventHandler {
         input
             .dispatch()
             .map_err(|e| miette!("Failed to dispatch input events: {}", e))?;
+        // Called even on poll timeouts, so IPC reload applies while devices are idle.
+        let touchpad_config = self.config.read().touchpad.unwrap_or_default();
+        self.touchpads.update_config(touchpad_config);
         for event in input {
-            if let Event::Gesture(e) = event {
-                match e {
+            match event {
+                Event::Device(event) => self.handle_device_event(event),
+                Event::Gesture(e) => match e {
                     GestureEvent::Pinch(e) => self.handle_pinch_event(e)?,
                     GestureEvent::Swipe(e) => self.handle_swipe_event(e, mh)?,
                     GestureEvent::Hold(e) => self.handle_hold_event(e)?,
                     _ => (),
-                }
+                },
+                _ => {}
             }
         }
         Ok(())
@@ -656,6 +669,7 @@ mod tests {
 
     fn drag_handler() -> EventHandler {
         EventHandler::new(Arc::new(RwLock::new(Config {
+            touchpad: None,
             gestures: vec![Gesture::Swipe(Swipe {
                 direction: SwipeDir::Any,
                 fingers: 3,
@@ -843,6 +857,7 @@ mod tests {
     #[test]
     fn cancelled_swipe_releases_direct_mouse_drag() {
         let config = Config {
+            touchpad: None,
             gestures: vec![Gesture::Swipe(Swipe {
                 direction: SwipeDir::Any,
                 fingers: 3,
