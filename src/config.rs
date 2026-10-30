@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn touchpad_node_is_optional_and_coexists_with_all_gestures() {
         let gestures = r#"
-swipe fingers=3 direction="any" acceleration=20 mouse-up-delay=500
+swipe fingers=3 direction="any" mouse-up-delay=500
 pinch fingers=2 direction="in" update="zoom $scale"
 hold fingers=4 action="launcher"
 "#;

@@ -128,7 +128,6 @@ fn get_default_config() -> &'static str {
 
 // Optional libinput acceleration for this process only (does not change desktop settings):
 // touchpad accel-profile="adaptive" accel-speed=0.3
-// Swipe acceleration is an extra linear multiplier after libinput acceleration.
 
 // ====================
 // 3-Finger Drag (macOS-like)
@@ -136,7 +135,7 @@ fn get_default_config() -> &'static str {
 // Works on both X11 and Wayland
 // - X11: Uses libxdo API directly (minimal latency)
 // - Wayland: Uses direct uinput writes; ydotool is a fallback
-swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
+swipe direction="any" fingers=3 mouse-up-delay=500
 
 // ====================
 // 4-Finger Workspace Switching

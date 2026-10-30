@@ -119,13 +119,13 @@ src/
 ```rust
 fn is_direct_mouse_gesture(gesture: &Gesture) -> bool {
     if let Gesture::Swipe(j) = gesture {
-        j.acceleration.is_some() && j.mouse_up_delay.is_some() && j.direction == SwipeDir::Any
+        j.mouse_up_delay.is_some() && j.direction == SwipeDir::Any
     } else {
         false
     }
 }
 ```
-This function identifies 3-finger drag gestures (direction="any" + mouse-up-delay + acceleration) to use direct mouse control instead of command execution.
+This function identifies 3-finger drag gestures (direction="any" + mouse-up-delay) to use direct mouse control instead of command execution. (Legacy `acceleration` property is deprecated and ignored).
 
 ### Configuration System
 
@@ -142,7 +142,7 @@ Optional top-level KDL node: `touchpad accel-profile="adaptive" accel-speed=0.3`
 
 `touchpad.rs` tracks gesture devices from startup and runtime DeviceAdded/DeviceRemoved events. It sets configured fields with input 0.9's `config_accel_set_profile` / `config_accel_set_speed`, skips devices without acceleration, and logs setter failures without aborting. `EventHandler::handle_event` compares the touchpad configuration on each dispatch (including the 100 ms poll timeout) and reapplies changes to existing devices after IPC reload.
 
-Only this process's libinput gesture deltas are affected; compositor pointer settings stay independent. Direct drag `acceleration` is an additional linear multiplier (value / 10) after libinput acceleration. Missing fields are never set: defaults apply at startup; removed overrides retain their previous device value until an explicit replacement or process restart. Generated config includes only a commented touchpad example. Mock tests cover configured-field calls, reload, hotplug/removal, and unsupported devices.
+Only this process's libinput gesture deltas are affected; compositor pointer settings stay independent. Direct drag movement follows libinput delta directly; legacy swipe `acceleration` property is deprecated and ignored with a warning. Missing fields are never set: defaults apply at startup; removed overrides retain their previous device value until an explicit replacement or process restart. Generated config includes only a commented touchpad example. Mock tests cover configured-field calls, reload, hotplug/removal, and unsupported devices.
 
 ## Common Development Tasks
 
@@ -194,8 +194,9 @@ journalctl --user -u gestures -f
    - Both event loop and IPC listener check shutdown flag
 
 3. **3-Finger Drag Requirements**:
-   - Must set both `mouse-up-delay` and `acceleration`
+   - Must set `mouse-up-delay`
    - `direction` must be "any"
+   - `acceleration` property is deprecated and ignored with a warning (pointer speed should be configured via `touchpad accel-speed`)
    - X11: Prefers libxdo, with the same uinput/ydotool fallback chain
    - Wayland: Requires read/write access to `/dev/uinput`; `ydotoold` is only needed for fallback
 

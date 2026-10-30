@@ -95,9 +95,9 @@ struct DragMotion {
 }
 
 impl DragMotion {
-    fn accumulate(&mut self, dx: f64, dy: f64, acceleration: f64) {
-        self.x += dx * acceleration;
-        self.y += dy * acceleration;
+    fn accumulate(&mut self, dx: f64, dy: f64) {
+        self.x += dx;
+        self.y += dy;
     }
 
     fn flush(&mut self, mh: &mut dyn MouseActions) {
@@ -384,6 +384,11 @@ impl EventHandler {
         for gesture in &config.gestures {
             match gesture {
                 Gesture::Swipe(swipe) => {
+                    if swipe.acceleration.is_some() {
+                        log::warn!(
+                            "swipe gesture property 'acceleration' is deprecated and ignored; use touchpad accel-speed / accel-profile instead"
+                        );
+                    }
                     swipe_map
                         .entry(swipe.fingers)
                         .or_default()
@@ -466,7 +471,7 @@ impl EventHandler {
 
     fn is_direct_mouse_gesture(gesture: &Gesture) -> bool {
         if let Gesture::Swipe(j) = gesture {
-            j.acceleration.is_some() && j.mouse_up_delay.is_some() && j.direction == SwipeDir::Any
+            j.mouse_up_delay.is_some() && j.direction == SwipeDir::Any
         } else {
             false
         }
@@ -507,8 +512,7 @@ impl EventHandler {
         self.handle_matching_gesture(fingers, mh, |gesture, mh| {
             if let Gesture::Swipe(j) = gesture {
                 if Self::is_direct_mouse_gesture(gesture) {
-                    let acceleration = j.acceleration.unwrap_or_default() as f64 / 10.0;
-                    drag_motion.accumulate(dx, dy, acceleration);
+                    drag_motion.accumulate(dx, dy);
                     drag_motion.flush(mh);
                 } else if (j.direction == current_dir || j.direction == SwipeDir::Any)
                     && !is_throttled
@@ -676,7 +680,7 @@ mod tests {
                 update: None,
                 start: None,
                 end: None,
-                acceleration: Some(20),
+                acceleration: None,
                 mouse_up_delay: Some(450),
             })],
         })))
@@ -701,12 +705,15 @@ mod tests {
             .handle_swipe_update(2.75, -1.25, &mut mouse)
             .unwrap();
         assert_eq!(mouse.calls, [MouseCall::Down]);
-        assert_eq!((handler.drag_motion.x, handler.drag_motion.y), (5.5, -2.5));
+        assert_eq!(
+            (handler.drag_motion.x, handler.drag_motion.y),
+            (2.75, -1.25)
+        );
         handler
             .handle_swipe_update(0.75, -0.75, &mut mouse)
             .unwrap();
-        assert_eq!(mouse.calls, [MouseCall::Down, MouseCall::Move(7, -4)]);
-        assert_eq!((handler.drag_motion.x, handler.drag_motion.y), (0.0, 0.0));
+        assert_eq!(mouse.calls, [MouseCall::Down, MouseCall::Move(3, -2)]);
+        assert_eq!((handler.drag_motion.x, handler.drag_motion.y), (0.5, 0.0));
     }
 
     #[test]
@@ -717,7 +724,6 @@ mod tests {
                 let mut config = handler.config.write();
                 let mut duplicate = config.gestures[0].clone();
                 if let Gesture::Swipe(swipe) = &mut duplicate {
-                    swipe.acceleration = Some(100);
                     swipe.mouse_up_delay = Some(999);
                 }
                 config.gestures.push(duplicate);
@@ -735,7 +741,7 @@ mod tests {
             }
             assert_eq!(
                 mouse.calls,
-                [MouseCall::Down, MouseCall::Move(4, -2), MouseCall::Up]
+                [MouseCall::Down, MouseCall::Move(2, -1), MouseCall::Up]
             );
             assert_eq!(mouse.mouse_up_calls, [(1, if cancelled { 0 } else { 450 })]);
         }
@@ -754,9 +760,9 @@ mod tests {
             mouse.calls,
             [
                 MouseCall::Down,
-                MouseCall::Move(6, -3),
-                MouseCall::Move(2, -1),
-                MouseCall::Move(4, -6)
+                MouseCall::Move(3, -1),
+                MouseCall::Move(1, -1),
+                MouseCall::Move(2, -3)
             ]
         );
     }
@@ -769,7 +775,7 @@ mod tests {
         for _ in 0..4 {
             allow_update(&mut handler);
             handler
-                .handle_swipe_update(0.125, -0.125, &mut mouse)
+                .handle_swipe_update(0.25, -0.25, &mut mouse)
                 .unwrap();
         }
         assert_eq!(mouse.calls, [MouseCall::Down, MouseCall::Move(1, -1)]);
@@ -787,7 +793,7 @@ mod tests {
         handler.handle_swipe_end(&mut mouse).unwrap();
         assert_eq!(
             mouse.calls,
-            [MouseCall::Down, MouseCall::Move(5, -2), MouseCall::Up]
+            [MouseCall::Down, MouseCall::Move(2, -1), MouseCall::Up]
         );
         assert_eq!(mouse.mouse_up_calls, [(1, 450)]);
         assert_eq!((handler.drag_motion.x, handler.drag_motion.y), (0.0, 0.0));
@@ -800,19 +806,19 @@ mod tests {
         handler.handle_swipe_begin(3, &mut mouse).unwrap();
         throttle_updates(&mut handler);
         handler
-            .handle_swipe_update(0.125, -0.125, &mut mouse)
+            .handle_swipe_update(0.25, -0.25, &mut mouse)
             .unwrap();
         handler.handle_swipe_cancel(&mut mouse).unwrap();
         handler.handle_swipe_begin(3, &mut mouse).unwrap();
         handler
-            .handle_swipe_update(0.375, -0.375, &mut mouse)
+            .handle_swipe_update(0.75, -0.75, &mut mouse)
             .unwrap();
         assert_eq!(
             mouse.calls,
             [MouseCall::Down, MouseCall::Up, MouseCall::Down]
         );
         handler
-            .handle_swipe_update(0.125, -0.125, &mut mouse)
+            .handle_swipe_update(0.25, -0.25, &mut mouse)
             .unwrap();
         assert_eq!(
             mouse.calls,
@@ -851,7 +857,7 @@ mod tests {
             });
             totals.push(total);
         }
-        assert_eq!(totals, [(60, -20); 3]);
+        assert_eq!(totals, [(30, -10); 3]);
     }
 
     #[test]
@@ -864,7 +870,7 @@ mod tests {
                 update: None,
                 start: None,
                 end: None,
-                acceleration: Some(20),
+                acceleration: None,
                 mouse_up_delay: Some(500),
             })],
         };

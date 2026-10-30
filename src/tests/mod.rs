@@ -79,7 +79,7 @@ fn parses_swipe_pinch_and_hold_configuration() {
     let config: Config = knuffel::parse(
         "test.kdl",
         r#"
-swipe fingers=3 direction="any" mouse-up-delay=450 acceleration=20 start="start" update="move $delta_x $delta_y" end="end"
+swipe fingers=3 direction="any" mouse-up-delay=450 start="start" update="move $delta_x $delta_y" end="end"
 pinch fingers=2 direction="in" start="pinch-start" update="zoom $scale" end="pinch-end"
 hold fingers=4 action="hold-action"
 "#,
@@ -92,7 +92,7 @@ hold fingers=4 action="hold-action"
                 fingers: 3,
                 direction: SwipeDir::Any,
                 mouse_up_delay: Some(450),
-                acceleration: Some(20),
+                acceleration: None,
                 start: Some("start".into()),
                 update: Some("move $delta_x $delta_y".into()),
                 end: Some("end".into()),

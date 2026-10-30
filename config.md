@@ -15,12 +15,12 @@ Optionally match the acceleration profile and speed used by your desktop:
 
 ```kdl
 touchpad accel-profile="adaptive" accel-speed=0.3
-swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=10
+swipe direction="any" fingers=3 mouse-up-delay=500
 ```
 
 Both properties are optional: `accel-profile` accepts `"adaptive"` or `"flat"`; `accel-speed` accepts a finite number from `-1.0` (slowest) to `1.0` (fastest), including `0.0` (device default speed). Invalid values reject the configuration.
 
-These settings apply only to gesture movement in this program's independent libinput context (dragging and swipe `$delta_x`/`$delta_y`). They do not change the compositor's system pointer settings. The swipe `acceleration` property applies an additional linear multiplier to direct dragging **after** libinput acceleration: `10` = 1x, `20` = 2x. Start with `acceleration=10` when matching your desktop's profile and speed.
+These settings apply only to gesture movement in this program's independent libinput context (dragging and swipe `$delta_x`/`$delta_y`). They do not change the compositor's system pointer settings. (Note: legacy swipe `acceleration` property is deprecated and ignored).
 
 `gestures reload` applies changed settings to existing devices, even while idle; newly connected gesture devices receive the current settings. Unspecified properties are left untouched (libinput defaults on startup). To restore a previously overridden setting, set its desired value explicitly, or remove the override and restart gestures.
 
@@ -49,12 +49,12 @@ In commands, these variables are replaced with actual values:
 
 **Works on both X11 and Wayland:**
 ```kdl
-swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
+swipe direction="any" fingers=3 mouse-up-delay=500
 ```
 
 **Parameters:**
 - `mouse-up-delay`: Delay in milliseconds before releasing mouse button (allows finger to leave trackpad temporarily)
-- `acceleration`: Extra linear multiplier after libinput acceleration (20 = 2x speed, 10 = 1x speed)
+- `acceleration` (deprecated): Legacy multiplier property; ignored if present (logs a warning). Use `touchpad accel-speed` instead.
 
 **Requirements:**
 - X11: No extra runtime dependency for drag (uses `libxdo` directly)
@@ -142,7 +142,7 @@ hold fingers=3 action="flameshot gui"
 
 ```kdl
 // 3-finger drag (X11 + Wayland)
-swipe direction="any" fingers=3 mouse-up-delay=500 acceleration=20
+swipe direction="any" fingers=3 mouse-up-delay=500
 
 // Workspace navigation
 swipe direction="w" fingers=4 end="hyprctl dispatch workspace e-1"
