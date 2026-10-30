@@ -1,5 +1,7 @@
 # Gestures
 
+English | [简体中文](./README.zh-CN.md)
+
 A libinput-based touchpad gesture handler for Linux that runs commands in response to gestures. It talks to the libinput API directly instead of parsing debug output, which keeps it fast and reliable on both X11 and Wayland.
 
 This fork focuses on high-performance three-finger dragging, with optimizations for both X11 and Wayland. For the technical background, see the [upstream discussion](https://github.com/riley-martin/gestures/discussions/6). Pre-compiled binaries are available on the [releases page](https://github.com/ferstar/gestures/releases).
