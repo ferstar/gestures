@@ -124,7 +124,7 @@ gestures generate-config
 
 This fork includes several performance improvements:
 
-1. **Regex caching**: one-time compilation using `once_cell::Lazy`
+1. **Zero-regex command rendering**: template variables (`$delta_x`, `$delta_y`, `$scale`, `$delta_angle`) are substituted with plain `str::replace` — no regex engine and no precompilation
 2. **Thread pool**: a 4-worker pool prevents PID exhaustion during fast gestures
 3. **Input-driven dragging**: direct mouse movement follows touchpad events without a fixed frame-rate limit, retaining fractional pixels for slow-drag precision. The worker coalesces queued movements when needed. Custom swipe update commands remain limited to 60 updates per second.
 4. **Timer-based delays**: non-blocking mouse-up delays for smooth dragging
