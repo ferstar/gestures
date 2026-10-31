@@ -159,16 +159,30 @@ func Start() error {
 
 	cmd := exec.Command(execPath, "start")
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true, // Detach process group
+		Setsid: true, // Create a new session, completely detaching from the GUI parent
 	}
 	// Redirect stdio to devnull so process doesn't hold gui pipes
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if err == nil {
+		cmd.Stdin = devNull
+		cmd.Stdout = devNull
+		cmd.Stderr = devNull
+	}
 
 	if err := cmd.Start(); err != nil {
+		if devNull != nil {
+			_ = devNull.Close()
+		}
 		return fmt.Errorf("failed to start gestures: %w", err)
 	}
+
+	// Reaping goroutine: waits for the child process so it never becomes a zombie (<defunct>)
+	go func() {
+		_ = cmd.Wait()
+		if devNull != nil {
+			_ = devNull.Close()
+		}
+	}()
 
 	// Give it a moment to bind socket
 	for i := 0; i < 10; i++ {
