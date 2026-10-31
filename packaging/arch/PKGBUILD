@@ -1,0 +1,92 @@
+# Maintainer: ferstar <zhangjianfei3@gmail.com>
+pkgname=gestures
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Fast libinput-based touchpad gestures daemon and GUI configuration panel"
+arch=('x86_64' 'aarch64')
+url="https://github.com/ferstar/gestures"
+license=('MIT')
+depends=(
+    'libinput'
+    'xdotool'
+    'systemd-libs'
+    'gtk3'
+    'webkit2gtk-4.1'
+)
+makedepends=(
+    'cargo'
+    'rust'
+    'go'
+    'pkgconf'
+)
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+    cd "$pkgname-$pkgver"
+    export CARGO_HOME="$srcdir/cargo-home"
+    cargo fetch --locked --manifest-path Cargo.toml
+    cd apps/panel
+    go mod download
+}
+
+build() {
+    cd "$pkgname-$pkgver"
+    export CARGO_HOME="$srcdir/cargo-home"
+    cargo build --release --locked --manifest-path Cargo.toml
+
+    cd apps/panel
+    go build -v -ldflags="-s -w" -o build/gestures-panel .
+}
+
+check() {
+    cd "$pkgname-$pkgver"
+    export CARGO_HOME="$srcdir/cargo-home"
+    cargo test --release --locked --manifest-path Cargo.toml
+    cd apps/panel
+    go test ./...
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+
+    # Install daemon and GUI panel binaries
+    install -Dm755 "target/release/gestures" "$pkgdir/usr/bin/gestures"
+    install -Dm755 "apps/panel/build/gestures-panel" "$pkgdir/usr/bin/gestures-panel"
+
+    # Install systemd user service
+    install -Dm644 /dev/stdin "$pkgdir/usr/lib/systemd/user/gestures.service" << 'EOF'
+[Unit]
+Description=Touchpad Gestures (with 3-finger drag performance improvements)
+Documentation=https://github.com/ferstar/gestures
+
+[Service]
+Environment=PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/bin
+Type=simple
+ExecStart=/usr/bin/gestures start
+ExecReload=/usr/bin/gestures reload
+Restart=no
+
+[Install]
+WantedBy=default.target
+EOF
+
+    # Install desktop entry
+    install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/gestures-panel.desktop" << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Gestures
+Comment=Touchpad gestures configuration panel
+Exec=gestures-panel
+Icon=gestures-panel
+Categories=Settings;HardwareSettings;Utility;
+Terminal=false
+StartupNotify=true
+EOF
+
+    # Install application icon
+    install -Dm644 "apps/panel/resources/icon.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/gestures-panel.png"
+
+    # License
+    install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
