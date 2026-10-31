@@ -9,4 +9,5 @@ test-build-local.sh
 # Go panel build output
 /apps/panel/build/
 /apps/panel/gestures-panel
+/dist/
 *.exe
