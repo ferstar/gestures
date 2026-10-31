@@ -187,10 +187,6 @@ jobs:
         run: |
           cargo build --release --target ${{ matrix.target }} --verbose
           strip target/${{ matrix.target }}/release/gestures
-          cd target/${{ matrix.target }}/release
-          tar czf ${{ matrix.asset_name }}.tar.gz gestures
-          mv ${{ matrix.asset_name }}.tar.gz ../../..
-          ls -lh ../../../${{ matrix.asset_name }}.tar.gz
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -202,6 +198,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Build panel binary
+        run: |
+          cd apps/panel
+          go build -ldflags="-s -w" -o build/gestures-panel .
+
+      - name: Package tarball with daemon and panel
+        run: |
+          mkdir -p dist/tarball
+          cp target/${{ matrix.target }}/release/gestures dist/tarball/ 2>/dev/null || cp target/release/gestures dist/tarball/
+          cp apps/panel/build/gestures-panel dist/tarball/
+          tar czf ${{ matrix.asset_name }}.tar.gz -C dist/tarball gestures gestures-panel
+          ls -lh ${{ matrix.asset_name }}.tar.gz
 
       - name: Build unified deb package
         run: |
