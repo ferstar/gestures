@@ -204,29 +204,22 @@ jobs:
           cd apps/panel
           go build -ldflags="-s -w" -o build/gestures-panel .
 
-      - name: Package tarball with daemon and panel
-        run: |
-          mkdir -p dist/tarball
-          cp target/${{ matrix.target }}/release/gestures dist/tarball/ 2>/dev/null || cp target/release/gestures dist/tarball/
-          cp apps/panel/build/gestures-panel dist/tarball/
-          tar czf ${{ matrix.asset_name }}.tar.gz -C dist/tarball gestures gestures-panel
-          ls -lh ${{ matrix.asset_name }}.tar.gz
-
-      - name: Build unified deb package
+      - name: Build packages (deb and arch pkg.tar.zst)
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
           if [ -z "$VERSION" ]; then
             VERSION=$(grep '^version =' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           fi
           ./scripts/package-deb.sh "$VERSION"
+          ./scripts/package-arch.sh "$VERSION"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
           path: |
-            ${{ matrix.asset_name }}.tar.gz
             dist/*.deb
+            dist/*.pkg.tar.zst
           if-no-files-found: error
 
   create-tag:
@@ -319,7 +312,7 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.deb" \) -exec cp {} release-assets/ \;
+          find artifacts -type f \( -name "*.deb" -o -name "*.pkg.tar.zst" \) -exec cp {} release-assets/ \;
           ls -lh release-assets/
 
       - name: Create GitHub Release

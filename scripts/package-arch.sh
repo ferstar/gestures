@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build an Arch Linux package (.pkg.tar.zst) locally from current repo sources
+# Build an Arch Linux package (.pkg.tar.zst) without requiring full makepkg/pacman install.
+# Suitable for cross-distro CI (Ubuntu runners) and Arch local builds alike.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${1:-}"
@@ -10,43 +11,64 @@ if [ -z "$VERSION" ]; then
     VERSION=$(grep '^version =' "${ROOT_DIR}/Cargo.toml" | head -1 | sed 's/version = "\(.*\)"/\1/')
 fi
 
-echo "==> Building Arch Linux package (.pkg.tar.zst) for version=${VERSION}"
+# Detect architecture
+ARCH="$(dpkg --print-architecture 2>/dev/null || uname -m)"
+case "$ARCH" in
+    x86_64|amd64)
+        PKG_ARCH="x86_64"
+        RUST_TARGET="x86_64-unknown-linux-gnu"
+        ;;
+    aarch64|arm64)
+        PKG_ARCH="aarch64"
+        RUST_TARGET="aarch64-unknown-linux-gnu"
+        ;;
+    *)
+        PKG_ARCH="$ARCH"
+        RUST_TARGET="${ARCH}-unknown-linux-gnu"
+        ;;
+esac
 
-TMP_DIR="$(mktemp -d -t gestures-arch-XXXXXX)"
-trap 'rm -rf "${TMP_DIR}"' EXIT
+echo "==> Packaging Arch Linux package (.pkg.tar.zst): version=${VERSION}, arch=${PKG_ARCH}"
 
-OUT_DIR="${ROOT_DIR}/dist"
-mkdir -p "${OUT_DIR}"
+# Locate or build binaries
+GESTURES_BIN="${ROOT_DIR}/target/${RUST_TARGET}/release/gestures"
+if [ ! -f "$GESTURES_BIN" ]; then
+    GESTURES_BIN="${ROOT_DIR}/target/release/gestures"
+fi
 
-cat << EOF > "${TMP_DIR}/PKGBUILD"
-# Maintainer: ferstar <zhangjianfei3@gmail.com>
-pkgname=gestures
-pkgver=${VERSION}
-pkgrel=1
-pkgdesc="Fast libinput-based touchpad gestures daemon and GUI configuration panel"
-arch=('x86_64' 'aarch64')
-url="https://github.com/ferstar/gestures"
-license=('MIT')
-depends=('libinput' 'xdotool' 'systemd-libs' 'gtk3' 'webkit2gtk-4.1')
-options=('!strip')
+PANEL_BIN="${ROOT_DIR}/apps/panel/build/gestures-panel"
 
-package() {
-    install -Dm755 "${ROOT_DIR}/target/release/gestures" "\$pkgdir/usr/bin/gestures"
-    install -Dm755 "${ROOT_DIR}/apps/panel/build/gestures-panel" "\$pkgdir/usr/bin/gestures-panel"
+if [ ! -f "$GESTURES_BIN" ]; then
+    echo "==> Building gestures binary (cargo)..."
+    cargo build --release --manifest-path "${ROOT_DIR}/Cargo.toml"
+    GESTURES_BIN="${ROOT_DIR}/target/release/gestures"
+fi
 
-    install -Dm644 /dev/stdin "\$pkgdir/etc/xdg/autostart/gestures.desktop" << 'AUTOSTART_EOF'
-[Desktop Entry]
-Type=Application
-Name=Gestures Daemon
-Comment=Touchpad gestures daemon
-Exec=gestures start
-Terminal=false
-NoDisplay=true
-X-GNOME-Autostart-Phase=Applications
-X-GNOME-Autostart-enabled=true
-AUTOSTART_EOF
+if [ ! -f "$PANEL_BIN" ]; then
+    echo "==> Building gestures-panel binary (go)..."
+    (cd "${ROOT_DIR}/apps/panel" && go build -o "${PANEL_BIN}" .)
+fi
 
-    install -Dm644 /dev/stdin "\$pkgdir/usr/share/applications/gestures-panel.desktop" << 'DESKTOP_EOF'
+BUILD_DIR="$(mktemp -d -t gestures-arch-pkg-XXXXXX)"
+trap 'rm -rf "${BUILD_DIR}"' EXIT
+
+mkdir -p "${BUILD_DIR}/usr/bin"
+mkdir -p "${BUILD_DIR}/etc/xdg/autostart"
+mkdir -p "${BUILD_DIR}/usr/share/applications"
+mkdir -p "${BUILD_DIR}/usr/share/icons/hicolor/512x512/apps"
+mkdir -p "${BUILD_DIR}/usr/share/licenses/gestures"
+
+# Copy binaries and strip
+install -m 755 "$GESTURES_BIN" "${BUILD_DIR}/usr/bin/gestures"
+install -m 755 "$PANEL_BIN" "${BUILD_DIR}/usr/bin/gestures-panel"
+strip "${BUILD_DIR}/usr/bin/gestures" 2>/dev/null || true
+strip "${BUILD_DIR}/usr/bin/gestures-panel" 2>/dev/null || true
+
+# Copy desktop and icon assets
+install -m 644 "${ROOT_DIR}/apps/panel/resources/icon.png" "${BUILD_DIR}/usr/share/icons/hicolor/512x512/apps/gestures-panel.png"
+install -m 644 "${ROOT_DIR}/LICENSE" "${BUILD_DIR}/usr/share/licenses/gestures/LICENSE"
+
+cat << 'EOF' > "${BUILD_DIR}/usr/share/applications/gestures-panel.desktop"
 [Desktop Entry]
 Type=Application
 Name=Gestures
@@ -56,26 +78,54 @@ Icon=gestures-panel
 Categories=Settings;HardwareSettings;Utility;
 Terminal=false
 StartupNotify=true
-DESKTOP_EOF
-
-    install -Dm644 "${ROOT_DIR}/apps/panel/resources/icon.png" "\$pkgdir/usr/share/icons/hicolor/512x512/apps/gestures-panel.png"
-    install -Dm644 "${ROOT_DIR}/LICENSE" "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE"
-}
 EOF
 
-# Ensure local binaries exist
-if [ ! -f "${ROOT_DIR}/target/release/gestures" ]; then
-    echo "==> Building gestures binary (cargo)..."
-    cargo build --release --manifest-path "${ROOT_DIR}/Cargo.toml"
-fi
+cat << 'EOF' > "${BUILD_DIR}/etc/xdg/autostart/gestures.desktop"
+[Desktop Entry]
+Type=Application
+Name=Gestures Daemon
+Comment=Touchpad gestures daemon
+Exec=gestures start
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-Phase=Applications
+X-GNOME-Autostart-enabled=true
+EOF
 
-if [ ! -f "${ROOT_DIR}/apps/panel/build/gestures-panel" ]; then
-    echo "==> Building gestures-panel binary (go)..."
-    (cd "${ROOT_DIR}/apps/panel" && go build -o build/gestures-panel .)
-fi
+# Calculate installed size
+INSTALLED_SIZE=$(du -sk "${BUILD_DIR}" | awk '{print $1 * 1024}')
+BUILD_DATE=$(date +%s)
 
-(cd "${TMP_DIR}" && makepkg -f --nodeps)
+# Write .PKGINFO
+cat << EOF > "${BUILD_DIR}/.PKGINFO"
+# Generated by gestures packaging script
+pkgname = gestures
+pkgbase = gestures
+xdata = pkgtype=pkg
+pkgver = ${VERSION}-1
+pkgdesc = Fast libinput-based touchpad gestures daemon and GUI configuration panel
+url = https://github.com/ferstar/gestures
+builddate = ${BUILD_DATE}
+packager = ferstar <https://github.com/ferstar/gestures>
+size = ${INSTALLED_SIZE}
+arch = ${PKG_ARCH}
+license = MIT
+depend = libinput
+depend = xdotool
+depend = systemd-libs
+depend = gtk3
+depend = webkit2gtk-4.1
+EOF
 
-cp "${TMP_DIR}"/gestures-*.pkg.tar.zst "${OUT_DIR}/"
-echo "==> Successfully created Arch package in ${OUT_DIR}:"
-ls -lh "${OUT_DIR}"/gestures-*.pkg.tar.zst
+OUT_DIR="${ROOT_DIR}/dist"
+mkdir -p "${OUT_DIR}"
+PKG_FILE="${OUT_DIR}/gestures-${VERSION}-1-${PKG_ARCH}.pkg.tar.zst"
+
+# Pack using tar and zstd with standard permissions
+(
+    cd "${BUILD_DIR}"
+    tar --sort=name --owner=root:0 --group=root:0 --mtime="@${BUILD_DATE}" -cf - .PKGINFO etc usr | zstd -T0 -19 -o "${PKG_FILE}"
+)
+
+echo "==> Successfully created Arch package: ${PKG_FILE}"
+ls -lh "${PKG_FILE}"
