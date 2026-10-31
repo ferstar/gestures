@@ -54,7 +54,7 @@ trap 'rm -rf "${BUILD_DIR}"' EXIT
 
 mkdir -p "${BUILD_DIR}/DEBIAN"
 mkdir -p "${BUILD_DIR}/usr/bin"
-mkdir -p "${BUILD_DIR}/usr/lib/systemd/user"
+mkdir -p "${BUILD_DIR}/etc/xdg/autostart"
 mkdir -p "${BUILD_DIR}/usr/share/applications"
 mkdir -p "${BUILD_DIR}/usr/share/icons/hicolor/512x512/apps"
 
@@ -79,21 +79,17 @@ Terminal=false
 StartupNotify=true
 EOF
 
-# Install systemd user service file
-cat << 'EOF' > "${BUILD_DIR}/usr/lib/systemd/user/gestures.service"
-[Unit]
-Description=Touchpad Gestures (with 3-finger drag performance improvements)
-Documentation=https://github.com/ferstar/gestures
-
-[Service]
-Environment=PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/bin
-Type=simple
-ExecStart=/usr/bin/gestures start
-ExecReload=/usr/bin/gestures reload
-Restart=no
-
-[Install]
-WantedBy=default.target
+# Install system-wide autostart desktop entry (runs gestures start in graphical session)
+cat << 'EOF' > "${BUILD_DIR}/etc/xdg/autostart/gestures.desktop"
+[Desktop Entry]
+Type=Application
+Name=Gestures Daemon
+Comment=Touchpad gestures daemon
+Exec=gestures start
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-Phase=Applications
+X-GNOME-Autostart-enabled=true
 EOF
 
 # Generate control file
@@ -107,21 +103,8 @@ Maintainer: ferstar <https://github.com/ferstar/gestures>
 Depends: libinput10, libxdo3, libgtk-3-0 | libgtk-3-0t64, libwebkit2gtk-4.1-0
 Description: Touchpad gestures daemon and graphical settings panel
  Gestures brings smooth touchpad gesture controls and 3-finger drag to Linux.
- Includes both the background service daemon and the graphical settings panel.
+ Automatically launches via desktop autostart on user graphical login.
 EOF
-
-# Postinst script to notify systemd
-cat << 'EOF' > "${BUILD_DIR}/DEBIAN/postinst"
-#!/bin/sh
-set -e
-if [ "$1" = "configure" ]; then
-    if command -v systemctl >/dev/null 2>&1; then
-        systemctl --global daemon-reload 2>/dev/null || true
-    fi
-fi
-exit 0
-EOF
-chmod 755 "${BUILD_DIR}/DEBIAN/postinst"
 
 OUT_DIR="${ROOT_DIR}/dist"
 mkdir -p "${OUT_DIR}"

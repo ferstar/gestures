@@ -9,9 +9,9 @@ import (
 
 	"github.com/egoist/mygo"
 
+	"gestures-panel/internal/daemon"
 	"gestures-panel/internal/kdl"
 	"gestures-panel/internal/model"
-	"gestures-panel/internal/systemd"
 )
 
 // App is the window state.
@@ -22,7 +22,7 @@ type App struct {
 
 	ConfigPath string
 	Config     *model.Config
-	Status     systemd.Status
+	Status     daemon.Status
 
 	StatusMsg string
 	StatusErr string
@@ -75,9 +75,9 @@ func (a *App) update(fn func()) {
 	fn()
 }
 
-// RefreshStatus queries systemd / env.
+// RefreshStatus queries daemon process and autostart state.
 func (a *App) RefreshStatus() {
-	a.Status = systemd.Refresh()
+	a.Status = daemon.Refresh()
 }
 
 // ReloadConfig reads the KDL file from disk.
@@ -115,42 +115,50 @@ func (a *App) SaveConfig() {
 		return
 	}
 	a.StatusMsg = "Saved " + a.ConfigPath
-	if err := systemd.Reload(); err != nil {
-		// Not fatal: config is on disk; service may not be installed yet.
-		a.StatusMsg += " (reload: " + err.Error() + ")"
+	if err := daemon.Reload(); err != nil {
+		// Not fatal: daemon may not be started yet
+		a.StatusMsg += " (daemon not running)"
 	} else {
-		a.StatusMsg += " · service reloaded"
+		a.StatusMsg += " · reloaded"
 	}
 	a.RefreshStatus()
 }
 
-// StartService / StopService / ReloadService wrap systemd.
+// StartService / StopService / ReloadService manage daemon.
 func (a *App) StartService() {
 	a.StatusErr = ""
-	if err := systemd.Start(); err != nil {
+	if err := daemon.Start(); err != nil {
 		a.StatusErr = err.Error()
 	} else {
-		a.StatusMsg = "Service started"
+		a.StatusMsg = "Daemon started"
 	}
 	a.RefreshStatus()
 }
 
 func (a *App) StopService() {
 	a.StatusErr = ""
-	if err := systemd.Stop(); err != nil {
+	if err := daemon.Stop(); err != nil {
 		a.StatusErr = err.Error()
 	} else {
-		a.StatusMsg = "Service stopped"
+		a.StatusMsg = "Daemon stopped"
 	}
 	a.RefreshStatus()
 }
 
 func (a *App) ReloadService() {
 	a.StatusErr = ""
-	if err := systemd.Reload(); err != nil {
+	if err := daemon.Reload(); err != nil {
 		a.StatusErr = err.Error()
 	} else {
-		a.StatusMsg = "Service reloaded"
+		a.StatusMsg = "Daemon reloaded"
+	}
+	a.RefreshStatus()
+}
+
+func (a *App) ToggleAutostart() {
+	enable := !a.Status.Autostart
+	if err := daemon.SetAutostart(enable); err != nil {
+		a.StatusErr = err.Error()
 	}
 	a.RefreshStatus()
 }

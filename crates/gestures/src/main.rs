@@ -45,8 +45,8 @@ fn detect_wayland() -> bool {
     false
 }
 
-/// Generate systemd user service file content
-fn generate_service_file() -> Result<String> {
+/// Generate autostart desktop entry content
+fn generate_autostart_desktop() -> Result<String> {
     let exe_path = env::current_exe()
         .map_err(|e| miette::miette!("Failed to get current executable path: {}", e))?;
 
@@ -54,69 +54,49 @@ fn generate_service_file() -> Result<String> {
         .to_str()
         .ok_or_else(|| miette::miette!("Executable path contains invalid UTF-8"))?;
 
-    let service_content = format!(
-        r#"[Unit]
-Description=Touchpad Gestures (with 3-finger drag performance improvements)
-Documentation=https://github.com/ferstar/gestures
-
-[Service]
-Environment=PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/bin
-Type=simple
-ExecStart={} start
-ExecReload={} reload
-Restart=no
-
-[Install]
-WantedBy=default.target
-"#,
-        exe_path_str, exe_path_str
+    let content = format!(
+        "[Desktop Entry]\nType=Application\nName=Gestures Daemon\nComment=Touchpad gestures daemon\nExec={} start\nTerminal=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\n",
+        exe_path_str
     );
 
-    Ok(service_content)
+    Ok(content)
 }
 
-/// Install or print systemd user service file
-fn install_service(print_only: bool) -> Result<()> {
-    let service_content = generate_service_file()?;
+/// Install or print autostart desktop file
+fn install_autostart(print_only: bool) -> Result<()> {
+    let content = generate_autostart_desktop()?;
 
     if print_only {
-        print!("{}", service_content);
+        print!("{}", content);
         return Ok(());
     }
 
-    // Get user's systemd directory
     let home =
         env::var("HOME").map_err(|_| miette::miette!("HOME environment variable not set"))?;
 
-    let systemd_dir = PathBuf::from(home).join(".config/systemd/user");
-    let service_path = systemd_dir.join("gestures.service");
+    let autostart_dir = PathBuf::from(home).join(".config/autostart");
+    let desktop_path = autostart_dir.join("gestures.desktop");
 
-    // Create directory if it doesn't exist
-    fs::create_dir_all(&systemd_dir).map_err(|e| {
+    fs::create_dir_all(&autostart_dir).map_err(|e| {
         miette::miette!(
             "Failed to create directory {}: {}",
-            systemd_dir.display(),
+            autostart_dir.display(),
             e
         )
     })?;
 
-    // Write service file
-    let mut file = fs::File::create(&service_path).map_err(|e| {
+    let mut file = fs::File::create(&desktop_path).map_err(|e| {
         miette::miette!(
-            "Failed to create service file {}: {}",
-            service_path.display(),
+            "Failed to create desktop file {}: {}",
+            desktop_path.display(),
             e
         )
     })?;
 
-    file.write_all(service_content.as_bytes())
-        .map_err(|e| miette::miette!("Failed to write service file: {}", e))?;
+    file.write_all(content.as_bytes())
+        .map_err(|e| miette::miette!("Failed to write desktop file: {}", e))?;
 
-    println!("✓ Service file installed to: {}", service_path.display());
-    println!("\nTo enable and start the service, run:");
-    println!("  systemctl --user enable --now gestures.service");
-    println!("\nTo view service status:");
-    println!("  systemctl --user status gestures.service");
+    println!("✓ Autostart desktop file installed to: {}", desktop_path.display());
 
     Ok(())
 }
@@ -276,8 +256,8 @@ fn main() -> Result<()> {
             };
             run_eh(Arc::new(RwLock::new(c)), config_path, is_wayland)?;
         }
-        Commands::InstallService { print } => {
-            install_service(print)?;
+        Commands::InstallAutostart { print } => {
+            install_autostart(print)?;
         }
         Commands::GenerateConfig { print, force } => {
             generate_config(print, force)?;
@@ -346,9 +326,9 @@ pub enum Commands {
     Reload,
     /// Start the program
     Start,
-    /// Install systemd user service
-    InstallService {
-        /// Print service file to stdout instead of installing
+    /// Install desktop autostart entry
+    InstallAutostart {
+        /// Print desktop entry to stdout instead of installing
         #[arg(short = 'p', long)]
         print: bool,
     },

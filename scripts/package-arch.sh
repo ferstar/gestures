@@ -34,21 +34,17 @@ package() {
     install -Dm755 "${ROOT_DIR}/target/release/gestures" "\$pkgdir/usr/bin/gestures"
     install -Dm755 "${ROOT_DIR}/apps/panel/build/gestures-panel" "\$pkgdir/usr/bin/gestures-panel"
 
-    install -Dm644 /dev/stdin "\$pkgdir/usr/lib/systemd/user/gestures.service" << 'SERVICE_EOF'
-[Unit]
-Description=Touchpad Gestures (with 3-finger drag performance improvements)
-Documentation=https://github.com/ferstar/gestures
-
-[Service]
-Environment=PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/bin
-Type=simple
-ExecStart=/usr/bin/gestures start
-ExecReload=/usr/bin/gestures reload
-Restart=no
-
-[Install]
-WantedBy=default.target
-SERVICE_EOF
+    install -Dm644 /dev/stdin "\$pkgdir/etc/xdg/autostart/gestures.desktop" << 'AUTOSTART_EOF'
+[Desktop Entry]
+Type=Application
+Name=Gestures Daemon
+Comment=Touchpad gestures daemon
+Exec=gestures start
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-Phase=Applications
+X-GNOME-Autostart-enabled=true
+AUTOSTART_EOF
 
     install -Dm644 /dev/stdin "\$pkgdir/usr/share/applications/gestures-panel.desktop" << 'DESKTOP_EOF'
 [Desktop Entry]

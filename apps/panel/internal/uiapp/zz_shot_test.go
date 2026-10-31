@@ -8,9 +8,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"gestures-panel/internal/daemon"
 	"gestures-panel/internal/kdl"
 	"gestures-panel/internal/model"
-	"gestures-panel/internal/systemd"
 )
 
 func TestZZShots(t *testing.T) {
@@ -26,7 +26,7 @@ func TestZZShots(t *testing.T) {
 	cfg.Touchpad = model.Touchpad{AccelProfile: "adaptive", AccelSpeed: &speed}
 	mk := func() *App {
 		a := &App{ConfigPath: "/home/user/.config/gestures.kdl", Config: cfg, EditIndex: -1,
-			Status:    systemd.Status{Active: true, State: "active", Enabled: true, DisplayServer: "wayland", InputGroupOK: true, InInputGroup: true},
+			Status:    daemon.Status{Active: true, Autostart: true, DisplayServer: "wayland", InputGroupOK: true, InInputGroup: true},
 			StatusMsg: "Loaded 6 gesture(s)"}
 		a.syncTouchpadEdit()
 		return a

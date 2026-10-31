@@ -157,17 +157,22 @@ func (a *App) settingsTab(c *ui.Context) {
 		})
 	})
 
-	// Service & System card
+	// Daemon & System card
 	ui.Column(c).Gap(8).Children(func() {
 		ui.Text(c, i18n.T("service_system")).FontSize(14).Bold()
 		card(c, t, func() {
 			ui.Form(c, func() {
-				state := st.State
-				if state == "" {
-					state = "unknown"
+				state := i18n.T("stopped")
+				color := t.TextMuted
+				if st.Active {
+					state = i18n.T("running")
+					if st.Pid > 0 {
+						state = fmt.Sprintf("%s (PID: %d)", state, st.Pid)
+					}
+					color = t.Success
 				}
 				ui.Field(c, i18n.T("status"), func() {
-					ui.Text(c, state).Bold().TextColor(stateColor(t, state))
+					ui.Text(c, state).Bold().TextColor(color)
 				})
 				ui.Field(c, i18n.T("config_file"), func() {
 					ui.Text(c, a.ConfigPath).FontSize(12).TextColor(t.TextMuted)
@@ -185,11 +190,20 @@ func (a *App) settingsTab(c *ui.Context) {
 					}
 				})
 				ui.Field(c, i18n.T("enabled"), func() {
-					if st.Enabled {
-						ui.Text(c, i18n.T("yes"))
-					} else {
-						ui.Text(c, i18n.T("no")).TextColor(t.TextMuted)
-					}
+					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+						label := i18n.T("no")
+						if st.Autostart {
+							label = i18n.T("yes")
+						}
+						ui.Text(c, label).FontSize(12)
+						btnLabel := "Enable"
+						if st.Autostart {
+							btnLabel = "Disable"
+						}
+						if ui.Button(c, btnLabel).FontSize(11).Padding(2, 6).Clicked() {
+							a.ToggleAutostart()
+						}
+					})
 				})
 			})
 
