@@ -187,16 +187,11 @@ systemctl --user restart gestures.service
 
 ```
 
-### X11 下报 `libxdo` 动态库缺失
+### X11 下 `libxdo` 缺失
 
-若系统升级了 `xdotool` / `libxdo`（例如从 `.so.3` 升至 `.so.4`），原二进制可能链接失效。执行以下命令重新编译安装：
+`libxdo` 已改为运行时动态加载（依次尝试 `libxdo.so.4`、`libxdo.so.3`、`libxdo.so`），系统升级更换 SONAME 不再导致二进制失效，也无需重新编译。
 
-```bash
-
-cargo install --path crates/gestures --force
-systemctl --user restart gestures
-
-```
+若三者都无法加载（例如未安装 `xdotool`），守护进程会记录警告并自动降级到 uinput 虚拟指针、再到 ydotool，拖拽仍可工作。想使用 libxdo 后端，安装发行版的 `xdotool`/`libxdo` 包后重启守护进程即可。
 
 ### 与桌面环境自带手势冲突
 

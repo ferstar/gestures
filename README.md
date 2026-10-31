@@ -191,30 +191,11 @@ ls -la "$XDG_RUNTIME_DIR/.ydotool_socket"
 
 Keep `gestures` and `ydotoold` in the same user session for the fallback. Avoid world-writable device or socket permissions.
 
-### `libxdo` Shared Library Error on X11
+### `libxdo` on X11
 
-Symptom:
+`libxdo` is loaded dynamically at runtime (`libxdo.so.4`, `libxdo.so.3`, or `libxdo.so`), so a system upgrade that changes the SONAME no longer breaks the binary, and no rebuild is needed.
 
-- `journalctl --user -u gestures` shows:
-  - `error while loading shared libraries: libxdo.so.3: cannot open shared object file`
-
-Cause:
-
-- System `xdotool/libxdo` was upgraded (for example to `libxdo.so.4`), but your existing `gestures` binary was built against an older SONAME (`libxdo.so.3`).
-
-Fix:
-
-```bash
-# Rebuild and reinstall gestures binary
-cargo install --path crates/gestures --force
-
-# Restart user service
-systemctl --user restart gestures
-
-# Verify runtime link and logs
-ldd ~/.cargo/bin/gestures | grep libxdo
-journalctl --user -u gestures -n 50 --no-pager
-```
+If none of the libraries can be loaded (for example, `xdotool` is not installed), the daemon logs a warning and falls back to the uinput virtual pointer, then to ydotool — dragging keeps working. To use the libxdo backend, install your distribution's `xdotool`/`libxdo` package and restart the daemon.
 
 ### Conflicts with DE Gestures
 
