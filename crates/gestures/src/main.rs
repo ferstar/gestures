@@ -96,7 +96,10 @@ fn install_autostart(print_only: bool) -> Result<()> {
     file.write_all(content.as_bytes())
         .map_err(|e| miette::miette!("Failed to write desktop file: {}", e))?;
 
-    println!("✓ Autostart desktop file installed to: {}", desktop_path.display());
+    println!(
+        "✓ Autostart desktop file installed to: {}",
+        desktop_path.display()
+    );
 
     Ok(())
 }
