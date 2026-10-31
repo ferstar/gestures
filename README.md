@@ -17,6 +17,7 @@ This fork focuses on high-performance three-finger dragging, with optimizations 
 - **Three-finger drag**: macOS-like drag with configurable mouse-up delay
 - **Live config reload** over IPC, no restart needed
 - **Graceful shutdown** on SIGTERM/SIGINT
+- **Control panel**: optional GUI in `apps/panel` to edit gestures and manage the user service
 
 ## Installation
 
@@ -45,9 +46,24 @@ cargo install --git https://github.com/ferstar/gestures.git
 ```bash
 git clone https://github.com/ferstar/gestures
 cd gestures
-cargo build --release
+cargo build --release   # workspace root; engine lives in crates/gestures
 sudo cp target/release/gestures /usr/local/bin/
+
+# or install from a local checkout
+cargo install --path crates/gestures --force
 ```
+
+### Control Panel (`apps/panel`)
+
+Optional GUI for editing gestures and managing the user service. Requires Go 1.27+.
+
+```bash
+cd apps/panel
+go build -o gestures-panel .
+./gestures-panel
+```
+
+See [apps/panel/README.md](./apps/panel/README.md) for details.
 
 ### Nix Flakes
 
@@ -63,7 +79,7 @@ sudo cp target/release/gestures /usr/local/bin/
 
 ## Configuration
 
-See [config.md](./config.md) for detailed configuration instructions.
+See [docs/config.md](./docs/config.md) for detailed configuration instructions.
 
 ### Quick Setup
 
@@ -156,7 +172,7 @@ This fork includes several performance improvements:
 ### High CPU on Wayland
 
 - Direct dragging has no fixed frame-rate limit; its bounded worker queue coalesces adjacent movement events.
-- Custom swipe update commands are limited by `ThrottleState::new(60)` in `src/event_handler.rs`.
+- Custom swipe update commands are limited by `ThrottleState::new(60)` in `crates/gestures/src/event_handler.rs`.
 - Check service CPU usage and logs while dragging; resource use depends on the touchpad event rate and command execution speed.
 
 ### 3-Finger Drag Not Working
@@ -226,7 +242,7 @@ Fix:
 
 ```bash
 # Rebuild and reinstall gestures binary
-cargo install --path . --force
+cargo install --path crates/gestures --force
 
 # Restart user service
 systemctl --user restart gestures

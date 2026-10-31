@@ -20,6 +20,7 @@
 - **触控板指针设置**：支持独立进程级 libinput 加速度曲线（profile）与速度（speed）控制，支持热重载。
 - **无缝热重载**：基于 IPC 实时重载配置，无需重启进程。
 - **平稳退出**：SIGTERM / SIGINT 退出时安全清空队列、释放按键，防止出现“按键卡死”。
+- **图形控制面板**：可选 GUI（`apps/panel`），用于编辑手势与管理用户服务。
 
 ---
 
@@ -47,9 +48,24 @@ cargo install --git https://github.com/ferstar/gestures.git
 ```bash
 git clone https://github.com/ferstar/gestures
 cd gestures
-cargo build --release
+cargo build --release   # 仓库根目录为 workspace，引擎位于 crates/gestures
 sudo cp target/release/gestures /usr/local/bin/
+
+# 或从本地源码安装
+cargo install --path crates/gestures --force
 ```
+
+### 控制面板（`apps/panel`）
+
+可选的图形界面，用于编辑手势与管理用户服务。需要 Go 1.27+。
+
+```bash
+cd apps/panel
+go build -o gestures-panel .
+./gestures-panel
+```
+
+详见 [apps/panel/README.md](./apps/panel/README.md)。
 
 ### Nix Flakes
 
@@ -67,7 +83,7 @@ sudo cp target/release/gestures /usr/local/bin/
 
 ## 配置指南
 
-详细配置参数请参阅 [config.md](./config.md)。
+详细配置参数请参阅 [docs/config.md](./docs/config.md)。
 
 ### 快速初始化
 
@@ -162,7 +178,7 @@ gestures install-service --print
 ### Wayland 下 CPU 占用
 
 - 直接拖拽依据触控板硬件事件频率实时发送，高负载时队列自动合并移动事件。
-- 自定义命令更新受 `ThrottleState::new(60)` 限制（每秒最多 60 次）。
+- 自定义命令更新受 `ThrottleState::new(60)`（`crates/gestures/src/event_handler.rs`）限制（每秒最多 60 次）。
 
 ### 三指拖拽无响应
 
@@ -204,7 +220,7 @@ systemctl --user restart gestures.service
 若系统升级了 `xdotool` / `libxdo`（例如从 `.so.3` 升至 `.so.4`），原二进制可能链接失效。执行以下命令重新编译安装：
 
 ```bash
-cargo install --path . --force
+cargo install --path crates/gestures --force
 systemctl --user restart gestures
 ```
 

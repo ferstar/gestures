@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'src/**'
+      - 'crates/**'
       - 'Cargo.toml'
       - '.github/workflows/nix.yml'
       - 'flake.nix'
@@ -14,7 +14,7 @@ on:
     branches:
       - main
     paths:
-      - 'src/**'
+      - 'crates/**'
       - 'Cargo.toml'
       - '.github/workflows/nix.yml'
       - 'flake.nix'
