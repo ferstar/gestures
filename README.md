@@ -82,6 +82,8 @@ gestures-panel
 ```
 From the panel, you can configure gestures, adjust acceleration, and toggle **Desktop Autostart** on or off.
 
+![Gestures control panel](docs/images/panel-en.png)
+
 ### Desktop Autostart (CLI)
 To start `gestures` automatically upon graphical desktop login:
 ```bash

@@ -88,6 +88,8 @@ gestures-panel
 ```
 在面板中可实时直观管理手势、调节加速度方案，并一键开启或关闭**桌面自启动**。
 
+![手势控制面板](docs/images/panel-zh.png)
+
 ### 命令行自启动管理
 将当前用户的自启动项写入 `~/.config/autostart/gestures.desktop`：
 ```bash
