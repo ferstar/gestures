@@ -44,6 +44,18 @@ makepkg -si
 sudo pacman -U dist/gestures-*.pkg.tar.zst
 ```
 
+### Nix Flakes
+
+```nix
+# flake.nix
+{
+  inputs.gestures.url = "github:ferstar/gestures";
+
+  # 然后添加到 packages:
+  # inputs.gestures.packages.${system}.gestures
+}
+```
+
 ### 通过 Cargo 安装
 
 ```bash

@@ -40,6 +40,18 @@ Or build directly from the git checkout:
 sudo pacman -U dist/gestures-*.pkg.tar.zst
 ```
 
+### Nix Flakes
+
+```nix
+# flake.nix
+{
+  inputs.gestures.url = "github:ferstar/gestures";
+
+  # Then add to packages:
+  # inputs.gestures.packages.${system}.gestures
+}
+```
+
 ### With Cargo
 
 ```bash
