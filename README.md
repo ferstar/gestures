@@ -2,20 +2,19 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-A modern libinput-based touchpad gesture handler and GUI settings panel for Linux. It directly interfaces with the libinput API, delivering ultra-low latency, smooth macOS-style three-finger dragging, and reliable gestures with native first-class Wayland support (as well as X11 compatibility).
+A libinput-based touchpad gesture handler and GUI settings panel for Linux. It talks directly to the libinput API instead of parsing debug output, and writes to `/dev/uinput` for low-latency dragging on Wayland (with X11 support).
 
 Pre-compiled packages (`.deb`, Arch Linux `PKGBUILD`) and binaries are available on the [releases page](https://github.com/ferstar/gestures/releases).
 
 ## Features
 
-- **Wayland First**: Native direct `/dev/uinput` virtual pointer for butter-smooth dragging with zero compositor friction; automatic X11 support.
-- **Three-Finger Drag**: Native-feeling macOS-style drag with configurable `mouse-up-delay`.
-- **Graphical Settings Panel**: Native, lightweight GUI (`gestures-panel`) with English & Chinese support, live status monitor, touchpad acceleration tweaking, and gesture management.
-- **Desktop Autostart**: Seamlessly integrates into desktop login (`~/.config/autostart` / `/etc/xdg/autostart`) with complete graphical session environment.
+- **Wayland & X11**: Direct `/dev/uinput` virtual pointer on Wayland; direct `libxdo` on X11. Auto-detected at startup.
+- **Three-Finger Drag**: macOS-style drag with configurable `mouse-up-delay`.
+- **Graphical Settings Panel**: Native GUI (`gestures-panel`) with English and Chinese support for editing gestures and touchpad settings.
+- **Desktop Autostart**: Integrates via standard XDG desktop autostart (`~/.config/autostart`).
 - **Gesture Types**: Swipe (8 directions + any), Pinch (in/out/rotate), Hold.
-- **Touchpad Acceleration**: Independent per-process libinput acceleration curve (`adaptive` / `flat`) and speed multiplier.
-- **Instant Live Reload**: Hot-reload via IPC (`gestures reload`), no restart required.
-- **Clean Lifecycle**: Reaps background workers cleanly and avoids zombie processes.
+- **Touchpad Acceleration**: Optional process-level acceleration profile (`adaptive` / `flat`) and speed setting.
+- **Live Reload**: Reload configuration on the fly via IPC (`gestures reload`) without restarting.
 
 ## Installation
 

@@ -2,22 +2,21 @@
 
 [English](./README.md) | 简体中文
 
-基于 Linux libinput 的现代化触控板手势管理与图形配置工具。直接调用 libinput API 与原生 `/dev/uinput` 虚拟设备，针对 **Wayland 作为主打环境深度优化**（同时向下兼容 X11），带来媲美 macOS 的极致丝滑三指拖拽与零延迟手势体验。
+基于 Linux libinput 的触控板手势工具与图形配置面板。直接调用 libinput API 而非解析 debug 文本输出，Wayland 下直写 `/dev/uinput` 虚拟指针设备（同时兼容 X11），支持三指拖拽与自定义手势命令。
 
 预编译包（Debian `.deb`、Arch Linux `PKGBUILD`）与二进制文件可在 [Releases 页面](https://github.com/ferstar/gestures/releases) 下载。
 
 ---
 
-## 核心特性
+## 功能特性
 
-- **Wayland 优先**：原生直写 `/dev/uinput` 虚拟指针，零合成器干扰，性能极佳且告别延迟与卡顿；自动向下兼容 X11。
-- **三指拖拽**：模拟媲美 macOS 原生手感的三指拖动，支持可配置的 `mouse-up-delay`（抬指缓冲防断触）。
-- **原生图形控制面板**：极简流线型 GUI 配置面板（`gestures-panel`），支持中英双语切换、手势可视化管理、触控板指针加速度实时调参与自启动管理。
-- **桌面原生自启动**：彻底摒弃传统 `systemd --user` 带来的权限与图形会话割裂痛点，直接通过标准 XDG Desktop Autostart 随桌面登录自启，天然拥有完整的图形会话与环境变量。
-- **手势类型丰富**：轻扫 Swipe（8 组方向 + any）、捏合 Pinch（张开/收缩/旋转）、按住 Hold。
-- **进程级触控板加速度**：独立配置加速曲线（`adaptive` 自适应 / `flat` 线性无加速）与倍率，不篡改桌面系统指针设定。
-- **IPC 瞬间热重载**：执行 `gestures reload` 或在界面点击保存即可秒级生效，无需重启进程。
-- **优雅退出无僵尸**：完善的后台进程收割与生命周期管理，停止时自动释放鼠标按键与虚拟设备。
+- **支持 Wayland 与 X11**：Wayland 下直写 `/dev/uinput` 虚拟指针；X11 下直调 `libxdo`。启动时自动检测。
+- **三指拖拽**：模拟类似 macOS 的三指拖拽手感，支持 `mouse-up-delay`（抬指缓冲防断触）。
+- **图形配置面板**：原生 GUI 面板（`gestures-panel`），支持中英双语、可视化编辑手势及触控板指针设置。
+- **桌面自启动**：基于标准 XDG Desktop Autostart 随桌面登录自启。
+- **支持的手势类型**：轻扫 Swipe（8 组方向 + any）、捏合 Pinch（张开/收缩/旋转）、按住 Hold。
+- **触控板指针加速**：可选独立配置加速曲线（`adaptive` 自适应 / `flat` 线性无加速）与倍率。
+- **配置热重载**：执行 `gestures reload` 或在界面保存即可即时生效，无需重启进程。
 
 ---
 
