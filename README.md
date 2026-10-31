@@ -2,38 +2,43 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-A libinput-based touchpad gesture handler for Linux that runs commands in response to gestures. It talks to the libinput API directly instead of parsing debug output, which keeps it fast and reliable on both X11 and Wayland.
+A modern libinput-based touchpad gesture handler and GUI settings panel for Linux. It directly interfaces with the libinput API, delivering ultra-low latency, smooth macOS-style three-finger dragging, and reliable gestures with native first-class Wayland support (as well as X11 compatibility).
 
-This fork focuses on high-performance three-finger dragging, with optimizations for both X11 and Wayland. For the technical background, see the [upstream discussion](https://github.com/riley-martin/gestures/discussions/6). Pre-compiled binaries are available on the [releases page](https://github.com/ferstar/gestures/releases).
+Pre-compiled packages (`.deb`, Arch Linux `PKGBUILD`) and binaries are available on the [releases page](https://github.com/ferstar/gestures/releases).
 
 ## Features
 
-- **Platform support**: X11 and Wayland, auto-detected at startup
-- **High performance**:
-  - X11: direct libxdo calls for minimal latency
-  - Wayland: direct uinput writes through a persistent virtual pointer, with ydotool fallback
-  - Thread pool for command execution (4 workers, prevents PID exhaustion)
-- **Gesture types**: Swipe (8 directions + any), Pinch, Hold
-- **Three-finger drag**: macOS-like drag with configurable mouse-up delay
-- **Live config reload** over IPC, no restart needed
-- **Graceful shutdown** on SIGTERM/SIGINT
-- **Control panel**: optional GUI in `apps/panel` to edit gestures and manage the user service
+- **Wayland First**: Native direct `/dev/uinput` virtual pointer for butter-smooth dragging with zero compositor friction; automatic X11 support.
+- **Three-Finger Drag**: Native-feeling macOS-style drag with configurable `mouse-up-delay`.
+- **Graphical Settings Panel**: Native, lightweight GUI (`gestures-panel`) with English & Chinese support, live status monitor, touchpad acceleration tweaking, and gesture management.
+- **Desktop Autostart**: Seamlessly integrates into desktop login (`~/.config/autostart` / `/etc/xdg/autostart`) with complete graphical session environment.
+- **Gesture Types**: Swipe (8 directions + any), Pinch (in/out/rotate), Hold.
+- **Touchpad Acceleration**: Independent per-process libinput acceleration curve (`adaptive` / `flat`) and speed multiplier.
+- **Instant Live Reload**: Hot-reload via IPC (`gestures reload`), no restart required.
+- **Clean Lifecycle**: Reaps background workers cleanly and avoids zombie processes.
 
 ## Installation
 
-### Prerequisites
+### Package Managers (Recommended)
 
-**System packages:**
+#### Debian / Ubuntu
+Download the unified `.deb` package from [Releases](https://github.com/ferstar/gestures/releases):
+```bash
+sudo dpkg -i gestures_1.1.0_amd64.deb
+```
+This installs the daemon (`gestures`), the GUI (`gestures-panel`), desktop menu entry, and global autostart.
 
-- `libudev-dev` / `libudev-devel`
-- `libinput-dev` / `libinput-devel`
-- `libxdo-dev` / `libxdo-devel`
-
-**Runtime dependencies:**
-
-- X11: nothing extra for dragging (uses `libxdo` directly)
-- Wayland: read/write access to `/dev/uinput` for the default direct-input backend. `ydotool` + `ydotoold` are only needed if uinput initialization fails or custom commands explicitly use ydotool.
-  - See the permission setup below; no daemon is required for the default uinput backend.
+#### Arch Linux
+Use the provided `PKGBUILD` in `packaging/arch`:
+```bash
+cd packaging/arch
+makepkg -si
+```
+Or build directly from the git checkout:
+```bash
+./scripts/package-arch.sh
+sudo pacman -U dist/gestures-*.pkg.tar.zst
+```
 
 ### With Cargo
 
@@ -46,112 +51,44 @@ cargo install --git https://github.com/ferstar/gestures.git
 ```bash
 git clone https://github.com/ferstar/gestures
 cd gestures
-cargo build --release   # workspace root; engine lives in crates/gestures
-sudo cp target/release/gestures /usr/local/bin/
 
-# or install from a local checkout
-cargo install --path crates/gestures --force
-```
+# Build Rust daemon engine
+cargo build --release
+sudo cp target/release/gestures /usr/bin/
 
-### Control Panel (`apps/panel`)
-
-Optional GUI for editing gestures and managing the user service. Requires Go 1.27+.
-
-```bash
+# Build GUI panel (requires Go 1.24+)
 cd apps/panel
-go build -o gestures-panel .
-./gestures-panel
+go build -o build/gestures-panel .
+sudo cp build/gestures-panel /usr/bin/
 ```
 
-See [apps/panel/README.md](./apps/panel/README.md) for details.
+## Running & Autostart
 
-### Nix Flakes
+### Graphical Panel
+Launch **Gestures** from your desktop application launcher, or run:
+```bash
+gestures-panel
+```
+From the panel, you can configure gestures, adjust acceleration, and toggle **Desktop Autostart** on or off.
 
-```nix
-# flake.nix
-{
-  inputs.gestures.url = "github:ferstar/gestures";
-
-  # Then add to packages:
-  # inputs.gestures.packages.${system}.gestures
-}
+### Desktop Autostart (CLI)
+To start `gestures` automatically upon graphical desktop login:
+```bash
+# Install autostart desktop entry to ~/.config/autostart/gestures.desktop
+gestures install-autostart
 ```
 
-## Configuration
-
-See [docs/config.md](./docs/config.md) for detailed configuration instructions.
-
-### Quick Setup
+### Manual CLI Run
 
 ```bash
-# Generate default config file
-gestures generate-config
-
-# Preview config without installing
-gestures generate-config --print
-
-# Force overwrite existing config
-gestures generate-config --force
-```
-
-### Quick Example
-
-```kdl
-// 3-finger drag (works on both X11 and Wayland)
-swipe direction="any" fingers=3 mouse-up-delay=500
-
-// 4-finger workspace switching
-swipe direction="w" fingers=4 end="hyprctl dispatch workspace e-1"
-swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
-```
-
-### Touchpad Acceleration for This Process
-
-Optionally match the acceleration profile and speed used by your desktop:
-
-```kdl
-touchpad accel-profile="adaptive" accel-speed=0.3
-swipe direction="any" fingers=3 mouse-up-delay=500
-```
-
-Both properties are optional: `accel-profile` accepts `"adaptive"` or `"flat"`; `accel-speed` accepts a finite number from `-1.0` (slowest) to `1.0` (fastest), including `0.0` (device default speed). Invalid values reject the configuration.
-
-These settings apply only to gesture movement in this program's independent libinput context (dragging and swipe `$delta_x`/`$delta_y`). They do not change the compositor's system pointer settings. (Note: legacy swipe `acceleration` property is deprecated and ignored).
-
-`gestures reload` applies changed settings to existing devices, even while idle; newly connected gesture devices receive the current settings. Unspecified properties are left untouched (libinput defaults on startup). To restore a previously overridden setting, set its desired value explicitly, or remove the override and restart gestures.
-
-## Running
-
-### Systemd (Recommended)
-
-```bash
-# 1. Generate config file (first time only)
-gestures generate-config
-
-# 2. Install service file
-gestures install-service
-
-# 3. Enable and start the service
-systemctl --user enable --now gestures.service
-```
-
-### Manual
-
-```bash
-# Auto-detect display server (X11 or Wayland)
+# Start daemon in background or foreground
 gestures start
 
-# Force Wayland mode (if needed)
-gestures --wayland start
-
-# Force X11 mode (if needed)
-gestures --x11 start
-
-# Reload config
+# Reload configuration on the fly
 gestures reload
 
-# Preview service file (without installing)
-gestures install-service --print
+# Generate default configuration (~/.config/gestures.kdl)
+gestures generate-config
 ```
 
 **Note**: The display server is detected via the `WAYLAND_DISPLAY` and `XDG_SESSION_TYPE` environment variables. Manual override is rarely needed.

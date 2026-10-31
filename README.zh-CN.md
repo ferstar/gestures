@@ -2,40 +2,47 @@
 
 [English](./README.md) | 简体中文
 
-基于 Linux libinput 的触控板手势工具，响应手势并触发命令或鼠标操作。直接调用 libinput API，而非解析 debug 文本输出，在 X11 与 Wayland 下均保证低延迟与高可靠性。
+基于 Linux libinput 的现代化触控板手势管理与图形配置工具。直接调用 libinput API 与原生 `/dev/uinput` 虚拟设备，针对 **Wayland 作为主打环境深度优化**（同时向下兼容 X11），带来媲美 macOS 的极致丝滑三指拖拽与零延迟手势体验。
 
-本 fork 专注于**极致性能的三指拖拽（Three-finger drag）**体验，针对 X11 与 Wayland 深度优化。技术背景参见 [上游讨论](https://github.com/riley-martin/gestures/discussions/6)。预编译二进制文件可在 [Releases 页面](https://github.com/ferstar/gestures/releases) 下载。
-
----
-
-## 特性
-
-- **多显示架构支持**：自动检测 X11 与 Wayland 环境。
-- **高性能输入架构**：
-  - **X11**：直连调用 `libxdo` C API，延迟极低。
-  - **Wayland**：原生直写 `/dev/uinput` 虚拟指针设备；无需外部后台守护进程；自动降级到 `ydotool`。
-  - **防 PID 耗尽**：命令执行由线程池统一管理（默认 4 个 worker）。
-- **手势类型**：轻扫 Swipe（8 组方向 + any）、捏合 Pinch、按住 Hold。
-- **三指拖拽**：模拟类似 macOS 的流畅三指拖拽，支持 `mouse-up-delay`（按键松开缓冲防断触）。
-- **触控板指针设置**：支持独立进程级 libinput 加速度曲线（profile）与速度（speed）控制，支持热重载。
-- **无缝热重载**：基于 IPC 实时重载配置，无需重启进程。
-- **平稳退出**：SIGTERM / SIGINT 退出时安全清空队列、释放按键，防止出现“按键卡死”。
-- **图形控制面板**：可选 GUI（`apps/panel`），用于编辑手势与管理用户服务。
+预编译包（Debian `.deb`、Arch Linux `PKGBUILD`）与二进制文件可在 [Releases 页面](https://github.com/ferstar/gestures/releases) 下载。
 
 ---
 
-## 安装说明
+## 核心特性
 
-### 依赖环境
+- **Wayland 优先**：原生直写 `/dev/uinput` 虚拟指针，零合成器干扰，性能极佳且告别延迟与卡顿；自动向下兼容 X11。
+- **三指拖拽**：模拟媲美 macOS 原生手感的三指拖动，支持可配置的 `mouse-up-delay`（抬指缓冲防断触）。
+- **原生图形控制面板**：极简流线型 GUI 配置面板（`gestures-panel`），支持中英双语切换、手势可视化管理、触控板指针加速度实时调参与自启动管理。
+- **桌面原生自启动**：彻底摒弃传统 `systemd --user` 带来的权限与图形会话割裂痛点，直接通过标准 XDG Desktop Autostart 随桌面登录自启，天然拥有完整的图形会话与环境变量。
+- **手势类型丰富**：轻扫 Swipe（8 组方向 + any）、捏合 Pinch（张开/收缩/旋转）、按住 Hold。
+- **进程级触控板加速度**：独立配置加速曲线（`adaptive` 自适应 / `flat` 线性无加速）与倍率，不篡改桌面系统指针设定。
+- **IPC 瞬间热重载**：执行 `gestures reload` 或在界面点击保存即可秒级生效，无需重启进程。
+- **优雅退出无僵尸**：完善的后台进程收割与生命周期管理，停止时自动释放鼠标按键与虚拟设备。
 
-**系统开发库：**
-- `libudev-dev` / `libudev-devel`
-- `libinput-dev` / `libinput-devel`
-- `libxdo-dev` / `libxdo-devel`
+---
 
-**运行权限与服务：**
-- **X11**：无需额外守护程序（直接链接 `libxdo`）。
-- **Wayland**：当前用户需对 `/dev/uinput` 拥有读写权限（默认直写原生虚拟指针）。`ydotool` 与 `ydotoold` 仅用作降级备用或自定义命令调用。
+## 安装方式
+
+### 推荐：包管理器安装
+
+#### Debian / Ubuntu
+在 [Releases 页面](https://github.com/ferstar/gestures/releases) 下载一体化 `.deb` 包：
+```bash
+sudo dpkg -i gestures_1.1.0_amd64.deb
+```
+会自动安装守护进程、图形面板、桌面菜单项及全局自启动配置。
+
+#### Arch Linux
+使用仓库内置的 `PKGBUILD`：
+```bash
+cd packaging/arch
+makepkg -si
+```
+或直接从源码生成 Arch 安装包：
+```bash
+./scripts/package-arch.sh
+sudo pacman -U dist/gestures-*.pkg.tar.zst
+```
 
 ### 通过 Cargo 安装
 
@@ -43,121 +50,51 @@
 cargo install --git https://github.com/ferstar/gestures.git
 ```
 
-### 源码编译
+### 本地源码编译
 
 ```bash
 git clone https://github.com/ferstar/gestures
 cd gestures
-cargo build --release   # 仓库根目录为 workspace，引擎位于 crates/gestures
-sudo cp target/release/gestures /usr/local/bin/
 
-# 或从本地源码安装
-cargo install --path crates/gestures --force
-```
+# 编译后台守护核心
+cargo build --release
+sudo cp target/release/gestures /usr/bin/
 
-### 控制面板（`apps/panel`）
-
-可选的图形界面，用于编辑手势与管理用户服务。需要 Go 1.27+。
-
-```bash
+# 编译图形面板（需 Go 1.24+）
 cd apps/panel
-go build -o gestures-panel .
-./gestures-panel
-```
-
-详见 [apps/panel/README.md](./apps/panel/README.md)。
-
-### Nix Flakes
-
-```nix
-# flake.nix
-{
-  inputs.gestures.url = "github:ferstar/gestures";
-
-  # 然后添加到 packages:
-  # inputs.gestures.packages.${system}.gestures
-}
+go build -o build/gestures-panel .
+sudo cp build/gestures-panel /usr/bin/
 ```
 
 ---
 
-## 配置指南
+## 运行与自启动
 
-详细配置参数请参阅 [docs/config.md](./docs/config.md)。
+### 图形面板（推荐）
+在应用程序菜单中搜索 **Gestures**（或手势控制），或直接在终端运行：
+```bash
+gestures-panel
+```
+在面板中可实时直观管理手势、调节加速度方案，并一键开启或关闭**桌面自启动**。
 
-### 快速初始化
+### 命令行自启动管理
+将当前用户的自启动项写入 `~/.config/autostart/gestures.desktop`：
+```bash
+gestures install-autostart
+```
+
+### 常用命令
 
 ```bash
-# 生成默认配置文件（~/.config/gestures.kdl）
-gestures generate-config
-
-# 仅在终端预览配置内容
-gestures generate-config --print
-
-# 强制覆盖已有配置文件
-gestures generate-config --force
-```
-
-### 配置示例
-
-```kdl
-// 三指拖拽（X11 与 Wayland 通用）
-swipe direction="any" fingers=3 mouse-up-delay=500
-
-// 四指横向轻扫切换工作区
-swipe direction="w" fingers=4 end="hyprctl dispatch workspace e-1"
-swipe direction="e" fingers=4 end="hyprctl dispatch workspace e+1"
-```
-
-### 触控板加速度配置
-
-若需匹配桌面环境的指针速度曲线：
-
-```kdl
-touchpad accel-profile="adaptive" accel-speed=0.3
-swipe direction="any" fingers=3 mouse-up-delay=500
-```
-
-- `accel-profile`：可选 `"adaptive"`（自适应）或 `"flat"`（线性）。
-- `accel-speed`：范围 `[-1.0, 1.0]`，`0.0` 为硬件默认速度。
-- 仅作用于本程序内的 libinput 上下文，不篡改桌面合成器的全局指针设定。
-- 运行 `gestures reload` 即可在已有设备上即时生效。
-- *注：旧版 `swipe` 下的 `acceleration` 参数已废弃并被忽略。*
-
----
-
-## 运行与管理
-
-### Systemd 用户服务（推荐）
-
-```bash
-# 1. 生成配置
-gestures generate-config
-
-# 2. 安装 systemd 服务文件
-gestures install-service
-
-# 3. 启用并启动服务
-systemctl --user enable --now gestures.service
-```
-
-### 命令行运行
-
-```bash
-# 自动检测 X11 或 Wayland
+# 启动守护进程
 gestures start
 
-# 强制指定 Wayland 模式
-gestures --wayland start
-
-# 强制指定 X11 模式
-gestures --x11 start
-
-# 重载配置
+# 热重载配置
 gestures reload
 
-# 预览服务文件模板
-gestures install-service --print
+# 生成默认配置文件（~/.config/gestures.kdl）
+gestures generate-config
+```
 ```
 
 ---
