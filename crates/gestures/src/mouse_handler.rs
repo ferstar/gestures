@@ -1,9 +1,9 @@
+use crate::xdo_dyn::DynamicXDo;
 use chrono::Duration;
 use evdev::{
     uinput::VirtualDevice, AttributeSet, EventType, InputEvent, KeyCode, RelativeAxisCode,
     SynchronizationCode,
 };
-use libxdo::XDo;
 use std::env;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
@@ -100,7 +100,7 @@ const MOUSE_EVENT_QUEUE_SIZE: usize = 64;
 type MouseEvent = (MouseCommand, i32, i32);
 
 enum MouseBackend {
-    X11(XDo),
+    X11(DynamicXDo),
     Uinput(VirtualDevice),
     Ydotool,
 }
@@ -108,13 +108,13 @@ enum MouseBackend {
 impl MouseBackend {
     fn new(is_xorg: bool) -> Self {
         if is_xorg {
-            match XDo::new(None) {
+            match DynamicXDo::new() {
                 Ok(xdo) => {
                     log::info!("Successfully initialized libxdo for X11");
                     return Self::X11(xdo);
                 }
                 Err(e) => {
-                    log::warn!("Failed to initialize libxdo: {e:?}; trying uinput");
+                    log::warn!("Failed to initialize libxdo: {e}; trying uinput");
                 }
             }
         }

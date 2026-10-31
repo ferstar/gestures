@@ -6,6 +6,7 @@ mod ipc_client;
 mod mouse_handler;
 mod touchpad;
 mod utils;
+mod xdo_dyn;
 
 #[cfg(test)]
 mod tests;
