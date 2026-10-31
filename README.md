@@ -21,19 +21,26 @@ Pre-compiled packages (`.deb`, Arch Linux `PKGBUILD`) and binaries are available
 ### Package Managers (Recommended)
 
 #### Debian / Ubuntu
+
 Download the unified `.deb` package from [Releases](https://github.com/ferstar/gestures/releases):
+
 ```bash
 sudo dpkg -i gestures_1.1.0_amd64.deb
 ```
+
 This installs the daemon (`gestures`), the GUI (`gestures-panel`), desktop menu entry, and global autostart.
 
 #### Arch Linux
+
 Use the provided `PKGBUILD` in `packaging/arch`:
+
 ```bash
 cd packaging/arch
 makepkg -si
 ```
+
 Or build directly from the git checkout:
+
 ```bash
 ./scripts/package-arch.sh
 sudo pacman -U dist/gestures-*.pkg.tar.zst
@@ -76,16 +83,23 @@ sudo cp build/gestures-panel /usr/bin/
 ## Running & Autostart
 
 ### Graphical Panel
+
 Launch **Gestures** from your desktop application launcher, or run:
+
 ```bash
 gestures-panel
 ```
+
 From the panel, you can configure gestures, adjust acceleration, and toggle **Desktop Autostart** on or off.
 
-![Gestures control panel](docs/images/panel-en.png)
+<p align="center">
+  <img src="docs/images/panel-en.png" alt="Gestures control panel" width="700">
+</p>
 
 ### Desktop Autostart (CLI)
+
 To start `gestures` automatically upon graphical desktop login:
+
 ```bash
 # Install autostart desktop entry to ~/.config/autostart/gestures.desktop
 gestures install-autostart

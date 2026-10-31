@@ -25,19 +25,26 @@
 ### 推荐：包管理器安装
 
 #### Debian / Ubuntu
+
 在 [Releases 页面](https://github.com/ferstar/gestures/releases) 下载一体化 `.deb` 包：
+
 ```bash
 sudo dpkg -i gestures_1.1.0_amd64.deb
 ```
+
 会自动安装守护进程、图形面板、桌面菜单项及全局自启动配置。
 
 #### Arch Linux
+
 使用仓库内置的 `PKGBUILD`：
+
 ```bash
 cd packaging/arch
 makepkg -si
 ```
+
 或直接从源码生成 Arch 安装包：
+
 ```bash
 ./scripts/package-arch.sh
 sudo pacman -U dist/gestures-*.pkg.tar.zst
@@ -82,16 +89,23 @@ sudo cp build/gestures-panel /usr/bin/
 ## 运行与自启动
 
 ### 图形面板（推荐）
+
 在应用程序菜单中搜索 **Gestures**（或手势控制），或直接在终端运行：
+
 ```bash
 gestures-panel
 ```
+
 在面板中可实时直观管理手势、调节加速度方案，并一键开启或关闭**桌面自启动**。
 
-![手势控制面板](docs/images/panel-zh.png)
+<p align="center">
+  <img src="docs/images/panel-zh.png" alt="手势控制面板" width="700">
+</p>
 
 ### 命令行自启动管理
+
 将当前用户的自启动项写入 `~/.config/autostart/gestures.desktop`：
+
 ```bash
 gestures install-autostart
 ```
@@ -108,7 +122,7 @@ gestures reload
 # 生成默认配置文件（~/.config/gestures.kdl）
 gestures generate-config
 ```
-```
+
 
 ---
 
@@ -144,25 +158,33 @@ gestures generate-config
 触控板原始事件读取与 `/dev/uinput` 创建均需要权限：
 
 ```bash
+
 # 若 /dev/uinput 不存在则加载内核模块
+
 sudo modprobe uinput
 
 # 将当前用户加入 input 组（执行后需重新登录生效）
+
 sudo usermod -aG input "$USER"
+
 ```
 
 若 `/dev/uinput` 默认对 input 组无写权限，创建 `/etc/udev/rules.d/99-gestures-uinput.rules`：
 
 ```udev
+
 KERNEL=="uinput", GROUP="input", MODE="0660"
+
 ```
 
 重新加载 udev 规则：
 
 ```bash
+
 sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=misc --sysname-match=uinput
 systemctl --user restart gestures.service
+
 ```
 
 ### X11 下报 `libxdo` 动态库缺失
@@ -170,8 +192,10 @@ systemctl --user restart gestures.service
 若系统升级了 `xdotool` / `libxdo`（例如从 `.so.3` 升至 `.so.4`），原二进制可能链接失效。执行以下命令重新编译安装：
 
 ```bash
+
 cargo install --path crates/gestures --force
 systemctl --user restart gestures
+
 ```
 
 ### 与桌面环境自带手势冲突
