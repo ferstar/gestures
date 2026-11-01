@@ -2,7 +2,9 @@ package i18n
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 )
 
 type Lang string
@@ -12,7 +14,39 @@ const (
 	LangZH Lang = "zh"
 )
 
-var currentLang = detectDefaultLang()
+var (
+	mu          sync.RWMutex
+	currentLang = initLang()
+)
+
+func resolveConfigFile() string {
+	if path := os.Getenv("GESTURES_PANEL_LANG_FILE"); path != "" {
+		return path
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "gestures", "panel_lang")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "gestures", "panel_lang")
+}
+
+func initLang() Lang {
+	cfg := resolveConfigFile()
+	if cfg != "" {
+		if data, err := os.ReadFile(cfg); err == nil {
+			switch strings.TrimSpace(string(data)) {
+			case string(LangZH):
+				return LangZH
+			case string(LangEN):
+				return LangEN
+			}
+		}
+	}
+	return detectDefaultLang()
+}
 
 func detectDefaultLang() Lang {
 	for _, env := range []string{"LC_ALL", "LC_MESSAGES", "LANG"} {
@@ -24,32 +58,57 @@ func detectDefaultLang() Lang {
 	return LangEN
 }
 
+func persist(l Lang) {
+	cfg := resolveConfigFile()
+	if cfg == "" {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(cfg), 0755)
+	_ = os.WriteFile(cfg, []byte(string(l)+"\n"), 0644)
+}
+
 // Current returns current language.
 func Current() Lang {
+	mu.RLock()
+	defer mu.RUnlock()
 	return currentLang
 }
 
-// Set switches language.
+// Set switches language and persists the choice.
 func Set(l Lang) {
+	mu.Lock()
 	if l == LangZH {
 		currentLang = LangZH
 	} else {
 		currentLang = LangEN
 	}
+	toPersist := currentLang
+	mu.Unlock()
+
+	persist(toPersist)
 }
 
-// Toggle toggles between en and zh.
+// Toggle toggles between en and zh and persists the choice.
 func Toggle() {
+	mu.Lock()
 	if currentLang == LangZH {
 		currentLang = LangEN
 	} else {
 		currentLang = LangZH
 	}
+	toPersist := currentLang
+	mu.Unlock()
+
+	persist(toPersist)
 }
 
 // T translates key with fallback to English or key itself.
 func T(key string) string {
-	if dict, ok := messages[currentLang]; ok {
+	mu.RLock()
+	lang := currentLang
+	mu.RUnlock()
+
+	if dict, ok := messages[lang]; ok {
 		if msg, ok := dict[key]; ok {
 			return msg
 		}
